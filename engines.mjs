@@ -31,16 +31,17 @@
 //   awaySummary    "While you were away" (needs message times the engine records)
 //   subagents      the Subagents panel
 //   connectors     the account's Gmail, Calendar and Drive connectors
+//   contextPolicy  1.92: Settings' context limit and subagent model reach this engine's processes (context-policy.mjs)
 export const ENGINES = {
   claude: {
     id: 'claude', label: 'Claude', idPrefix: null, routed: true,
     foreign: /^(?:gpt-|codex(?:$|-)|o\d(?:$|-))/i,
-    features: { steer: true, sideChat: true, branch: true, planMode: false, autoModel: true, awaySummary: true, subagents: true, connectors: true },
+    features: { steer: true, sideChat: true, branch: true, planMode: false, autoModel: true, awaySummary: true, subagents: true, connectors: true, contextPolicy: true },
   },
   codex: {
     id: 'codex', label: 'Codex', idPrefix: 'cx:', routed: true,
     foreign: /^(?:claude-|opus(?:$|\[)|sonnet(?:$|\[)|haiku(?:$|\[)|fable(?:$|\[))/i,
-    features: { steer: true, sideChat: true, branch: true, planMode: true, autoModel: false, awaySummary: true, subagents: true, connectors: true },
+    features: { steer: true, sideChat: true, branch: true, planMode: true, autoModel: false, awaySummary: true, subagents: true, connectors: true, contextPolicy: true },
   },
   // OpenRouter models through OpenCode over ACP (acp.mjs), opt-in per server (POCKET_ACP_ENABLE). Its models are
   // provider-prefixed OpenRouter slugs (openrouter/deepseek/deepseek-v4.1-flash-1017); a Claude- or GPT-looking id is a
@@ -49,7 +50,7 @@ export const ENGINES = {
   acp: {
     id: 'acp', label: 'OpenRouter', idPrefix: 'acp:', routed: true,
     foreign: /^(?:claude-|opus(?:$|\[)|sonnet(?:$|\[)|haiku(?:$|\[)|fable(?:$|\[)|gpt-|codex(?:$|-)|o\d(?:$|-))/i,
-    features: { steer: false, sideChat: false, branch: false, planMode: true, autoModel: false, awaySummary: false, subagents: false, connectors: false },
+    features: { steer: false, sideChat: false, branch: false, planMode: true, autoModel: false, awaySummary: false, subagents: false, connectors: false, contextPolicy: false },
   },
 };
 
