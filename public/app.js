@@ -756,6 +756,13 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
       <div class="model-offer-list" id="s-models-list" aria-busy="true">${CLAUDE_CATALOG.map(([id, label, sub]) => `<button class="opt" data-offer-model="${esc(id)}" aria-pressed="false" aria-disabled="true"><span class="dot"></span><span>${esc(label)}<span class="sub">${esc(sub)}</span></span></button>`).join('')}</div>
       <p class="title-note" id="s-models-note" role="status">Loading the model list…</p>
       <span class="vault-set-actions"><button class="chip" id="s-models-reset" hidden>Use the server's list</button></span></div>
+    <div class="title-settings model-offer" id="s-context" role="group" aria-labelledby="s-context-h" aria-describedby="s-context-lead">
+      <p class="vault-set-head" id="s-context-h">Context and subagents</p>
+      <p class="title-note" id="s-context-lead">Each reply reads the whole conversation again, so long conversations use the most of your plan. Compacting summarizes the older part. Subagents can run on a cheaper model than the conversation.</p>
+      <label class="voice-field">Compact conversations<select id="s-context-limit" disabled><option value="agent">When the agent decides</option></select></label>
+      <label class="voice-field">Subagent model<select id="s-context-workers" disabled><option value="default">The agent’s own choice</option><option value="tier-down">One tier below the conversation’s model</option></select></label>
+      <label class="voice-field">Subagent effort<select id="s-context-effort" disabled><option value="">The agent’s own choice</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+      <p class="title-note" id="s-context-note" role="status">Loading the context setting…</p></div>
     <div class="title-settings model-offer trusted-actions" id="s-trusted" role="group" aria-labelledby="s-trusted-h" aria-describedby="s-trusted-lead">
       <p class="vault-set-head" id="s-trusted-h">Actions that run without asking</p>
       <p class="title-note" id="s-trusted-lead">In Review actions, Claude Code, Codex and OpenRouter run the read-only actions listed here without an approval card. Everything else still asks.</p>
@@ -1000,6 +1007,33 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
     ].filter(Boolean).join(' ');
     sh.querySelector('#s-models-reset').hidden = !cm.saved;
   };
+  // 1.92: the context limit and subagent model for every engine that supports them (context-policy.mjs on the server).
+  const paintContext = () => {
+    const cp = srv?.contextPolicy, lim = sh.querySelector('#s-context-limit'), wk = sh.querySelector('#s-context-workers'), ef = sh.querySelector('#s-context-effort'), note = sh.querySelector('#s-context-note');
+    if (!cp || !lim) return;
+    const k = n => `${Math.round(n / 1000)}K`, limits = [...new Set([...(cp.limits || []), cp.compaction.limit])].sort((a, b) => a - b);
+    lim.innerHTML = '<option value="agent">When the agent decides</option>' + limits.map(n => `<option value="${n}">Before ${k(n)} tokens</option>`).join('');
+    lim.value = cp.compaction.mode === 'limit' ? String(cp.compaction.limit) : 'agent';
+    wk.value = cp.workers.model; ef.value = cp.workers.effort || '';
+    lim.disabled = wk.disabled = ef.disabled = false;
+    const on = (cp.engines || []).filter(e => e.applies).map(e => e.id === 'claude' ? 'Claude Code' : e.label), off = (cp.engines || []).filter(e => !e.applies).map(e => e.label);
+    note.textContent = [
+      on.length ? `Applies to ${on.join(' and ')} conversations from their next reply.` : '',
+      off.length ? `${off.join(' and ')} conversations keep their own behavior for now.` : '',
+      cp.compaction.mode === 'limit' ? `The agent compacts shortly before ${k(cp.compaction.limit)} tokens.` : '',
+      cp.workers.model === 'tier-down' ? 'Fable conversations run Opus subagents, Opus runs Sonnet and GPT Astra runs GPT Sol. Other models keep the agent’s choice, and a conversation can still name a model for one subagent.' : '',
+    ].filter(Boolean).join(' ');
+  };
+  const saveContext = async patch => {
+    const fields = ['#s-context-limit', '#s-context-workers', '#s-context-effort'].map(q => sh.querySelector(q));
+    fields.forEach(f => { f.disabled = true; });
+    try { srv = await api('/settings', { method: 'POST', body: JSON.stringify({ contextPolicy: patch }), signal: AbortSignal.timeout(8000) }); toast('Saved. Conversations use it from their next reply'); }
+    catch (err) { toast(err.message || 'Could not save the context setting'); }
+    finally { if (sh.isConnected) { fields.forEach(f => { f.disabled = false; }); paintContext(); } }
+  };
+  sh.querySelector('#s-context-limit').onchange = e => saveContext({ compaction: e.target.value === 'agent' ? { mode: 'agent' } : { mode: 'limit', limit: Number(e.target.value) } });
+  sh.querySelector('#s-context-workers').onchange = e => saveContext({ workers: { model: e.target.value } });
+  sh.querySelector('#s-context-effort').onchange = e => saveContext({ workers: { effort: e.target.value || null } });
   const saveModelOffer = async (value, done) => {
     const list = sh.querySelector('#s-models-list'); list.setAttribute('aria-busy', 'true');
     try {
@@ -1368,12 +1402,12 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
     try {
       srv = await api('/settings', {signal:AbortSignal.timeout(8000)});
       if (!sh.isConnected) return;
-      paintTitles(); paintNotifySettings(); paintModelOffer(); paintTrusted(); paintRouter(); paintAccess(); paintProjectsSetting(); paintDocumentsSetting(); paintTasksSetting(); paintInboxSetting(); paintVaultSetting(); paintSecretsSetting(); paintFeaturesNote();
+      paintTitles(); paintNotifySettings(); paintModelOffer(); paintContext(); paintTrusted(); paintRouter(); paintAccess(); paintProjectsSetting(); paintDocumentsSetting(); paintTasksSetting(); paintInboxSetting(); paintVaultSetting(); paintSecretsSetting(); paintFeaturesNote();
       btn.disabled = false; btn.setAttribute('aria-pressed', String(Boolean(srv.titleSync)));
       btn.querySelector('.dot').classList.toggle('on', Boolean(srv.titleSync));
       sh.querySelector('#s-sync-state').textContent = "Conversation names follow Claude Code's titles, and renames here show there too";
     } catch {
-      if (sh.isConnected) { sh.querySelector('#s-sync-state').textContent = 'Could not load this setting.'; sh.querySelector('#s-titles-state').textContent = 'Could not load this setting.'; sh.querySelector('#s-models-note').textContent = 'Could not load the model list.'; sh.querySelector('#s-trusted-note').textContent = 'Could not load the list.'; retry.hidden = false; }
+      if (sh.isConnected) { sh.querySelector('#s-sync-state').textContent = 'Could not load this setting.'; sh.querySelector('#s-titles-state').textContent = 'Could not load this setting.'; sh.querySelector('#s-context-note').textContent = 'Could not load this setting.'; sh.querySelector('#s-models-note').textContent = 'Could not load the model list.'; sh.querySelector('#s-trusted-note').textContent = 'Could not load the list.'; retry.hidden = false; }
     }
   };
   sh.querySelector('#s-sync-retry').onclick = loadSettings;

@@ -1075,8 +1075,9 @@ function wireSession(s, conn) {
   };
 }
 
-async function openCodexSession({ threadId, forkFrom, cwd, model, approvalMode, hooks, onForked }) {
-  const s = { threadId, cliBin:CODEX_BIN, approvalMode, cwd, turn: null, hooks, lastActivityAt: Date.now(), runnerToken: randomBytes(16).toString('hex') };
+async function openCodexSession({ threadId, forkFrom, cwd, model, approvalMode, hooks, onForked, launch }) {
+  const policyConfig = launch?.key ? { config: launch.config } : {}; // 1.92: the context limit and subagent model (context-policy.mjs)
+  const s = { threadId, cliBin:CODEX_BIN, approvalMode, cwd, turn: null, hooks, lastActivityAt: Date.now(), runnerToken: randomBytes(16).toString('hex'), policyKey: launch?.key || '' };
   const conn = new AppServer({
     name: `codex ${threadId || 'new'}`, transport: spawnTransport({ POCKET_RUNNER_TOKEN: s.runnerToken, ...(threadId ? { POCKET_SESSION_ID: 'cx:' + threadId } : {}) }),
     onNotify: (method, params) => onSessionNotify(s, method, params),
@@ -1090,7 +1091,7 @@ async function openCodexSession({ threadId, forkFrom, cwd, model, approvalMode, 
       // sandbox/approval ride on the resume, not the turn: turn/start's sandboxPolicy is
       // a tagged union, and setting it here keeps one code path for both entry points.
       const resumed = await conn.request('thread/resume', {
-        threadId, ...codexPermissionSettings(approvalMode), ...(cwd ? { cwd } : {}), ...choiceInstructions(threadId),
+        threadId, ...codexPermissionSettings(approvalMode), ...(cwd ? { cwd } : {}), ...choiceInstructions(threadId), ...policyConfig,
       }, 60_000);
       s.model = resumed.model; s.effort = resumed.reasoningEffort || null; s.cwd = resumed.cwd || cwd;
     } else if (forkFrom) {
@@ -1098,7 +1099,7 @@ async function openCodexSession({ threadId, forkFrom, cwd, model, approvalMode, 
       // the new thread's writer lock exactly as a resume would; the source thread is only read.
       const r = await conn.request('thread/fork', {
         threadId: forkFrom, excludeTurns: true, ...codexPermissionSettings(approvalMode), ...(cwd ? { cwd } : {}), ...choiceInstructions(),
-        ...(model ? { model } : {}),
+        ...(model ? { model } : {}), ...policyConfig,
       }, 60_000);
       s.model = r.model; s.effort = r.reasoningEffort || null; s.cwd = r.cwd || cwd;
       s.threadId = r?.thread?.id;
@@ -1109,7 +1110,7 @@ async function openCodexSession({ threadId, forkFrom, cwd, model, approvalMode, 
     } else {
       const r = await conn.request('thread/start', {
         cwd, ...codexPermissionSettings(approvalMode), ...choiceInstructions(),
-        ...(model ? { model } : {}),
+        ...(model ? { model } : {}), ...policyConfig,
       }, 60_000);
       s.model = r.model; s.effort = r.reasoningEffort || null;
       s.threadId = r?.thread?.id || r?.threadId;
@@ -1132,19 +1133,20 @@ async function openCodexSession({ threadId, forkFrom, cwd, model, approvalMode, 
   return s;
 }
 
-export async function startCodexTurn({ threadId, forkFrom, cwd, text, model, effort, executionMode = 'work', approvalMode='review', attachments, action = null, emit, onFinish, onQuestion, onApproval, auditApproval, onForked }) {
+export async function startCodexTurn({ threadId, forkFrom, cwd, text, model, effort, executionMode = 'work', approvalMode='review', attachments, action = null, emit, onFinish, onQuestion, onApproval, auditApproval, onForked, launch = null }) {
   const existing = threadId && codexTurns.get(threadId);
   if (existing) throw Object.assign(new Error('busy'), { code: 409 });
   const hooks = { emit, onFinish, onQuestion, onApproval, auditApproval };
   let s = threadId && codexSessions.get(threadId);
   // Permissions ride on thread/resume, so a change needs a fresh process (after the old
   // one has let go of the writer lock).
-  if (s && (s.closing || s.exited || s.cliBin !== CODEX_BIN || s.approvalMode !== approvalMode || (cwd && s.cwd && cwd !== s.cwd))) {
+  // 1.92: and so does a changed context policy (the config rides on thread/resume too).
+  if (s && (s.closing || s.exited || s.cliBin !== CODEX_BIN || s.approvalMode !== approvalMode || (cwd && s.cwd && cwd !== s.cwd) || (s.policyKey || '') !== (launch?.key || ''))) {
     await closeCodexSession(s, s.closing || s.exited ? 'closing' : 'settings changed');
     s = null;
   }
   const reused = Boolean(s);
-  if (!s) s = await openCodexSession({ threadId, forkFrom: threadId ? undefined : forkFrom, cwd, model, approvalMode, hooks, onForked });
+  if (!s) s = await openCodexSession({ threadId, forkFrom: threadId ? undefined : forkFrom, cwd, model, approvalMode, hooks, onForked, launch });
   s.hooks = hooks;
   if (codexTurns.get(s.threadId)) throw Object.assign(new Error('busy'), { code: 409 });
   const turn = makeTurn(s, { text, model, effort, executionMode, hooks });
@@ -1422,6 +1424,12 @@ export function latestCodexModels(list) {
 // it reads the cached list, which codexModels() fills at startup and on every picker load.
 let knownModels = []; // the last non-empty list, kept across a reader restart (modelCache is cleared then)
 export const codexSuccessor = id => (id && latestCodexModels(knownModels).replaced[id]) || id;
+// 1.92: the newest GPT Sol the last model list had (the context policy's worker under GPT Astra), or null before a list.
+export const codexNewestSol = () => latestCodexModels(knownModels).models.find(m => codexVersionOf(m.id)?.family === 'gpt|sol')?.id || null;
+// 1.92: Codex's own default model (top-level `model` in config.toml), for a conversation started on Default.
+export function codexDefaultModel() {
+  try { const top = fs.readFileSync(path.join(CODEX_HOME, 'config.toml'), 'utf8').split(/^\s*\[/m)[0]; return top.match(/^\s*model\s*=\s*["']([^"']+)["']/m)?.[1] || null; } catch { return null; }
+}
 
 export async function codexModels() {
   if (Date.now() - modelCache.at < 10 * 60_000 && modelCache.list.length && modelCache.stamp === binStamp(CODEX_BIN)) return modelCache.list;

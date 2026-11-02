@@ -3,6 +3,17 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.92.0] — 2026-11-02 · build 185
+
+Requested by Brad: a measurement of four weeks of his Claude Code use found that long conversations, not the models' own writing, used most of his plan (65% of the cost came from requests made after a conversation passed 200K tokens), and that subagents ran on the same model as the conversation that started them. He asked for a context limit and a subagent policy in Pocket itself, for every agent, with a choice of how and when to compact. This release is phase 1 of [the spec](docs/context-policy-spec.md).
+
+- **Policy.** `context-policy.mjs` checks and reads `contextPolicy` (`compaction.mode` `agent` | `limit`, `compaction.limit` 50K–1M; `workers.model` `default` | `tier-down`; `workers.effort`) and turns it into each engine's launch options. The default changes nothing, and saving the default stores `null`.
+- **Claude Code.** `spawnRunner` adds `env` to `--settings`: `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, `CLAUDE_CODE_SUBAGENT_MODEL` (`opus` under Fable or Mythos, `sonnet` under Opus) and `CLAUDE_CODE_SUBAGENT_EFFORT`. `--settings` outranks `~/.claude/settings.json` `env`; this was verified on 2.1.316 (a 150K window in `/context`, and a subagent on Sonnet 5.5 at low effort while settings.json said `opus`). The leader is the turn's model, then Pocket's default, then the CLI's. Runner markers record `policyKey`, and a reused process whose policy changed is replaced (`context policy changed`) unless it is running background jobs.
+- **Codex.** `thread/start`, `thread/resume` and `thread/fork` carry `config`: `model_auto_compact_token_limit` (85% of the limit), `agents.default_subagent_model` (the newest GPT Sol under GPT Astra, `codexNewestSol`) and `agents.default_subagent_reasoning_effort`. The leader is the turn's model, else `config.toml`'s `model` (`codexDefaultModel`). A session opened with another policy is reopened. This was verified on 0.166.0: a sub-agent with no model ran `gpt-6.1-sol` at `low`.
+- **Engines.** The `contextPolicy` feature is true for Claude and Codex and false for OpenRouter: OpenCode's compaction has no token limit, so that comes in phase 2.
+- **Settings.** Agents & instance → Context and subagents: Compact conversations, Subagent model, Subagent effort, and a note saying which agents it applies to. Saving restarts idle processes.
+- Tests: `context-policy.test.mjs` (defaults, tiers, launch options, validation; over HTTP, the settings round trip, the Claude `--settings` env before and after a change, a Fable leader, a Codex default leader from `config.toml`, and clearing). `fake-claude` records `settingsEnv`, and `fake-codex` records each thread's `config` and `model`.
+
 ## [1.91.1] — 2026-10-31 · build 184
 
 Requested by Brad: move Pocket's remaining GPT-6 Sol default, the Inbox Watch Codex judge, to GPT-6.1 Sol.
