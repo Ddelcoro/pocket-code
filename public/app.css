@@ -1521,9 +1521,34 @@ header.bar .chat-statebar { border: 0; background: none; padding: 0; order: 10; 
 .vault-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
 .vault-request-actions { margin-top: 10px; }
 .vault-request-actions .chip { min-height: 44px; padding-inline: 16px; font-size: 14px; color: var(--text); }
-@media (max-width: 600px) { .vault-request-actions .chip { flex: 1 1 auto; justify-content: center; } } /* three answers share the row, then wrap */
+@media (max-width: 600px) { .vault-request-actions .chip, .vault-request-actions .vault-answer { flex: 1 1 auto; justify-content: center; } } /* three answers share the row, then wrap */
 .rail .vault-request { padding-inline: 14px; }
-.rail .vault-request-actions .chip { flex: 1 1 auto; justify-content: center; padding-inline: 10px; }
+.rail .vault-request-actions .chip, .rail .vault-request-actions .vault-answer { flex: 1 1 auto; justify-content: center; padding-inline: 10px; }
+/* 1.93 (Damon): the request reads as a sentence, and the answer is plain to see. Allow once is the accent's filled button
+   (the brand orange by default) and Deny its outlined twin at the same size; Always allow stays a chip. */
+.vault-request h3 { display: block; font-weight: 400; line-height: 1.45; }
+.vault-request h3:focus { outline: none; } /* focused only to bring a link's reader to the request */
+.vault-request-who, .vault-request h3 .vault-name { font-weight: 650; }
+.vault-answer { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 7.5em; padding: 0 20px; border-radius: 12px; font: inherit; font-size: 15px; font-weight: 650; cursor: pointer; }
+.vault-allow { background: var(--clay); color: var(--on-accent); border: 1px solid var(--clay); }
+.vault-deny { background: transparent; color: var(--text); border: 1px solid var(--dim); }
+.vault-allow:hover { filter: brightness(1.08); }
+.vault-deny:hover { background: var(--raised); }
+.vault-answer:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+.vault-answer:disabled { opacity: .55; cursor: default; filter: none; }
+.vault-request-missed, .vault-notice { margin: 0 0 10px; padding: 9px 12px; border: 1px solid var(--warn); border-radius: 10px; color: var(--text); font-size: 14px; line-height: 1.45; max-width: 64ch; }
+.vault-notice { margin: 0 18px 14px; }
+.vault-notice:focus { outline: none; }
+/* Finding a secret: search and order over the list, a New mark for a day, and a short highlight on the row a link opened. */
+.vault-tools { padding-top: 0; }
+.vault-order { flex: 0 1 170px; }
+.vault-secrets .vault-item[hidden] { display: none; }
+.vault-new { display: inline-block; margin-left: 8px; padding: 0 7px; border: 1px solid var(--clay); border-radius: 999px; color: var(--clay); font-size: 11.5px; font-weight: 650; line-height: 18px; vertical-align: 1px; }
+.vault-item, .vault-request { transition: background-color .9s ease-out, box-shadow .9s ease-out; }
+.vault-item.vault-flash, .vault-request.vault-flash { background: var(--raised); box-shadow: inset 3px 0 0 var(--clay); transition: none; }
+@media (prefers-reduced-motion: reduce) { .vault-item, .vault-request { transition: none; } }
+.vault-card-thumb { color: var(--dim); }
+.vault-card-thumb .i { width: 22px; height: 22px; }
 .vault-sheet .vault-name { overflow-wrap: anywhere; }
 .vault-sheet .task-facts a { color: var(--clay); text-decoration-thickness: 1px; }
 .vault-section { margin: 0 14px 14px; }

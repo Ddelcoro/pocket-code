@@ -2097,6 +2097,7 @@ async function paintFileCards(container, fresh = false) {
   if (fresh || cardResults.id !== id || Date.now() - cardResults.at > 4000) {
     let d; try { d = await api('/session/' + encodeURIComponent(id) + '/results'); } catch { return; }
     if (typeof documentsOn === 'function' && documentsOn()) await loadDocs(fresh).catch(() => { });
+    if (typeof vaultOn === 'function' && vaultOn()) await loadVault(fresh).catch(() => { }); // 1.93: secrets this conversation stored, current when the chat opens or a turn ends
     cardResults = { id, at: Date.now(), list: (d.results || []).filter(r => r.kind === 'file' && r.inText && CARD_EXT.test(r.target)) };
   }
   if (seq !== cardSeq || chatId !== id || !container.isConnected) return;
@@ -2140,7 +2141,30 @@ async function paintFileCards(container, fresh = false) {
     list.insertAdjacentHTML('beforeend', html);
     list.lastElementChild.querySelector('.file-card-img')?.addEventListener('error', e => e.target.remove());
   }
+  // 1.93 (Damon): a secret this conversation stored in the Vault gets a card under the first reply after it was stored,
+  // which opens the Vault at that secret. Only the name and kind are shown; the value never reaches the page.
+  const secrets = typeof vaultOn === 'function' && vaultOn() && typeof vaultSnap !== 'undefined' && vaultSnap?.items ? vaultSnap.items.filter(i => i.addedIn?.session === id) : [];
+  container.querySelectorAll('.file-card[data-card-vault]').forEach(el => { if (!secrets.some(i => i.id === el.dataset.cardVault)) el.remove(); });
+  for (const i of secrets.slice().sort((a, b) => vaultTime(a.created) - vaultTime(b.created))) {
+    const at = vaultTime(i.created) || 0;
+    const host = replies.find(m => Date.parse(m.dataset.ts || 0) >= at) || replies.at(-1);
+    const old = container.querySelector(`.file-card[data-card-vault="${CSS.escape(i.id)}"]`);
+    if (!host) { old?.remove(); continue; }
+    const html = vaultCardHTML(i);
+    if (old && old.parentElement?.parentElement === host && old.outerHTML.replace(/\s+/g, ' ') === html.replace(/\s+/g, ' ')) continue;
+    old?.remove();
+    let list = host.querySelector(':scope > .file-cards');
+    if (!list) { list = document.createElement('div'); list.className = 'file-cards'; const choices = host.querySelector(':scope > .choices'); choices ? choices.before(list) : host.append(list); }
+    list.insertAdjacentHTML('beforeend', html);
+  }
   container.querySelectorAll('.file-cards:empty').forEach(el => el.remove());
+}
+function vaultCardHTML(i) {
+  const kind = VAULT_KIND_WORD[i.kind] || 'Secret';
+  return `<div class="file-card vault-card" data-card-vault="${esc(i.id)}"><a class="file-card-main" href="${esc(vaultItemHref(i.name))}" aria-label="Open ${esc(i.name)} in the Vault">
+    <span class="file-card-thumb vault-card-thumb" aria-hidden="true">${vaultKindIcon(i.kind)}</span>
+    <span class="file-card-body"><span class="file-card-name vault-name">${esc(i.name)}</span><span class="file-card-meta">${esc(kind)} · stored in the Vault</span></span></a>
+    <span class="file-card-actions"><span class="file-card-kept">In the Vault</span></span></div>`;
 }
 function keptCardHTML(d) {
   const ext = (String(d.file || '').match(/\.([^.]+)$/)?.[1] || d.kind || 'file').toUpperCase();
@@ -3934,7 +3958,7 @@ async function renderNew({ home = false } = {}) {
 
 /* ---------- router ---------- */
 async function route() {
-  if (location.hash === '#/vault/requests') { history.replaceState(history.state, '', '#/vault'); vaultFocusRequests = true; } // 1.39: a request push opens the list at its Requests
+  { const f = vaultFocusOf(location.hash); if (f) { history.replaceState(history.state, '', '#/vault'); vaultSetFocus(f); } } // 1.39: a request push opens the list at its Requests; 1.93: at one secret or one request
   rememberViewNavigation(location.hash || '#/');
   rememberReading();stashAttachments(); closeCurrentSheet?.(); ++chatRenderVersion;
   closeES(); chatId = null;

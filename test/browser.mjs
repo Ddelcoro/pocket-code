@@ -84,12 +84,15 @@ const seedTasks=()=>{taskStore.tasks.length=0;
 const vaultDir=path.join(out,'vault');let vaultStore=null;
 const seedVault=()=>{fs.rmSync(vaultDir,{recursive:true,force:true});fs.mkdirSync(vaultDir,{recursive:true});
  vaultFixture.key=newKey();vaultStore=new VaultStore(path.join(vaultDir,'vault.enc'),{key:parseKey(vaultFixture.key)});vaultStore.access=()=>fixtureSettings.vaultAccess||'once';
+ // 1.93: the items were added an hour apart, ten days ago, so Newest first has one order; square-hooks is the newest.
+ let added=now-10*86400000;const act=vaultStore.act.bind(vaultStore);vaultStore.now=()=>added;vaultStore.act=(...a)=>{const r=act(...a);if(a[0]?.action==='add')added+=3600000;return r;};
  vaultStore.act({action:'add',name:'zoho-books',kind:'api_key',values:{value:'zk-fixture-secret-7731'},url:'https://books.zoho.com',tags:['billing']});
  vaultStore.act({action:'add',name:'vendor-portal',kind:'login',values:{username:'ops@example.test',password:'portal-fixture-pass'},url:'https://portal.example.test',policy:'auto',expiresAt:new Date(now+5*86400000).toISOString()});
  vaultStore.act({action:'add',name:'bank-recovery',kind:'note',values:{text:'recovery codes fixture'},policy:'owner'});
  vaultStore.act({action:'add',name:'acme-oauth',kind:'credentials',values:{client_id:'acme-client-fixture',client_secret:'acme-secret-fixture-4410'},url:'https://auth.acme.test'});
  vaultStore.act({action:'add',name:'square-hooks',kind:'api_key',values:{value:'sq-fixture-key-2208',signature_key:'sq-signature-fixture-6631'},policy:'ask'});
  const old=vaultStore.act({action:'add',name:'old-twilio',kind:'token',values:{value:'tw-fixture-old'}});vaultStore.act({action:'remove',item:old.id});
+ vaultStore.act=act;vaultStore.now=Date.now;
  const ask=argv=>{const env={TOKEN:'zoho-books'},bound=vaultStore.resolveBindings(env),cmd=vaultStore.checkCommand(argv,vaultDir);return vaultStore.request({bound,cmd,need:vaultStore.decide(bound,cmd),env,session:rows[0].id,sessionTitle:rows[0].title});};
  vaultStore.answer(ask(['node','sync-invoices.mjs']).id,'always');
  ask(['node','export-ledger.mjs','--month','2026-09']);};
@@ -263,6 +266,7 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/vault/import'){const b=await body();if(b.passphrase!=='import-fixture-pass')return json({error:'Wrong passphrase, or not a Pocket Code Vault export.'},400);vaultFixture.imported=Buffer.from(String(b.data||''),'base64').toString();return json({ok:true,added:2,skipped:['zoho-books']});}
   if(url.pathname==='/api/vault'){const snap=vaultStore.snapshot({owner:true});return json({...snap,requests:[...snap.requests,...vaultFixture.extraRequests],push:{enabled:false}});}
   // The whole body goes to the real store, so values (fixed and custom) and removeFields reach it unchanged.
+  if(url.pathname==='/api/vault/agent-add'){const b=await body();try{return json({ok:true,item:vaultStore.act({action:'add',name:b.name,kind:b.kind,values:b.values},{actor:'agent',session:b.session,sessionTitle:b.sessionTitle})});}catch(e){return fail(e);}} // 1.93: an agent's pocket-vault put from a conversation
   if(url.pathname==='/api/vault/act'){const b=await body();try{const r=vaultStore.act(b,{actor:'owner'});return json(b.action==='answer'?{ok:true,request:r}:{ok:true,item:r,...(r.removed?{removed:true}:{})});}catch(e){return fail(e);}}
   if(url.pathname==='/api/vault/field'){const b=await body();try{return json({value:vaultStore.field(String(b.item||''),String(b.field||''))});}catch(e){return fail(e);}}
   if(url.pathname==='/api/vault/audit')return json({rows:vaultStore.auditRows({item:url.searchParams.get('item')||undefined,owner:true,limit:Number(url.searchParams.get('limit'))||50})});

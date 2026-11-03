@@ -1,12 +1,12 @@
 /* Vault (1.39): secrets agents use without seeing. Off until Settings → Projects, files, tasks & vault turns it on
    (window.pocketFeatures.vault), and it can only be turned on once POCKET_VAULT_KEY is set. One view, the list (#/vault,
-   and #/vault/requests from a push), which opens like Tasks: as a tab, beside a conversation, in a window of its own, or
+   and #/vault/requests from a push; 1.93: #/vault/item/<name> and #/vault/request/<id> open the list at one secret or one request), which opens like Tasks: as a tab, beside a conversation, in a window of its own, or
    full-screen on the phone. The list never carries a value: a value is fetched one field at a time when the owner taps
    Show, lives only in that sheet's DOM, and is wiped when the sheet closes or the app is hidden. Nothing here writes a
    value to storage, a draft, a toast or the console. Data comes from /api/vault; every change goes through
    /api/vault/act. Names, commands, notes and session titles are written by agents: always esc() them. */
 const vaultOn=()=>Boolean(window.pocketFeatures?.vault);
-let vaultSnap=null,vaultAt=0,vaultLoading=null,vaultView=null,vaultFocusRequests=false,vaultPainted='';
+let vaultSnap=null,vaultAt=0,vaultLoading=null,vaultView=null,vaultPainted='';
 // Icons drawn in the app's stroke (IC lives in app.js, which loads after this file).
 const VIC={
  key:'<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15.5" r="4"/><path d="M11 12.5l8.5-8.5M16.5 7l2.5 2.5M14 9.5l2 2"/></svg>',
@@ -59,6 +59,85 @@ const vaultRequestNames=r=>Array.isArray(r.itemNames)&&r.itemNames.length?r.item
 const vaultRequests=()=>(vaultSnap?.requests||[]).filter(r=>!r.answer&&!(r.expiresAt&&Date.parse(r.expiresAt)<=Date.now()));
 const vaultRequestCount=()=>vaultRequests().length;
 const vaultViewTitle=()=>'Vault';
+/* 1.93 (Damon): finding a secret. A search box over the list, newest first (or A–Z, remembered on this device), a New mark
+   for a day, and links that open one secret or one request. A link's address is put back to #/vault, so there is one Vault
+   tab whatever was linked; the target is kept in localStorage for five minutes, so a Vault that opens in a pane, a window of
+   its own or after signing in finds it too, and a Vault already open in a pane or window hears of it from the storage event. */
+let vaultQuery='',vaultFocusMem=null,vaultNotice='';
+const vaultMissed=new Map(); // request id -> why the notification's answer did not land; shown on its card until answered
+const VAULT_NEW_MS=24*3600e3,VAULT_FOCUS_KEY='pc-vault-focus',VAULT_FOCUS_TTL=5*60e3,VAULT_ORDER_KEY='pc-vault-order';
+const vaultOrder=()=>{try{return localStorage.getItem(VAULT_ORDER_KEY)==='name'?'name':'new';}catch{return 'new';}};
+function vaultSetOrder(v){try{localStorage.setItem(VAULT_ORDER_KEY,v==='name'?'name':'new');}catch{}}
+// Newest first: created is to the second, so two stored in the same second keep the store's order (it appends), later first.
+const vaultSorted=items=>items.map((i,n)=>[i,n]).sort(vaultOrder()==='name'?([a],[b])=>a.name.localeCompare(b.name):([a,x],[b,y])=>(vaultTime(b.created)||0)-(vaultTime(a.created)||0)||y-x).map(([i])=>i);
+const vaultIsNew=i=>Date.now()-(vaultTime(i.created)||0)<VAULT_NEW_MS;
+const vaultSearchText=i=>[i.name,VAULT_KIND_WORD[i.kind]||'',...(i.tags||[]),vaultHost(i.url),i.addedIn?.sessionTitle||''].join(' ').toLowerCase();
+const vaultMatches=(i,q)=>q.split(/\s+/).filter(Boolean).every(w=>vaultSearchText(i).includes(w));
+const vaultItemHref=name=>location.origin+'/#/vault/item/'+encodeURIComponent(name);
+// #/vault/item/<name>, #/vault/request/<id>[?missed=<why>&tap=allow|deny] (a notification answer that did not land), #/vault/requests.
+function vaultFocusOf(hash){
+ if(hash==='#/vault/requests')return {requests:true};
+ const m=/^#\/vault\/(item|request)\/([^?]+)(?:\?(.*))?$/.exec(hash||'');if(!m)return null;
+ let v='';try{v=decodeURIComponent(m[2]);}catch{return null;}
+ if(m[1]==='item')return VAULT_NAME_RE.test(v)?{item:v}:null;
+ const q=new URLSearchParams(m[3]||''),missed=q.get('missed')||'',tap=q.get('tap')==='deny'?'deny':'allow';
+ return /^[A-Za-z0-9_-]{1,40}$/.test(v)?{request:v,...(missed?{missed,tap}:{})}:null;
+}
+function vaultSetFocus(f){try{localStorage.setItem(VAULT_FOCUS_KEY,JSON.stringify({...f,at:Date.now()}));vaultFocusMem=null;}catch{vaultFocusMem=f;}}
+function vaultTakeFocus(){
+ let f=vaultFocusMem;vaultFocusMem=null;
+ try{const raw=localStorage.getItem(VAULT_FOCUS_KEY);if(raw){localStorage.removeItem(VAULT_FOCUS_KEY);const s=JSON.parse(raw);if(!f&&s&&Date.now()-s.at<VAULT_FOCUS_TTL)f=s;}}catch{}
+ return f;
+}
+// A link in a conversation to one secret or request: the Vault opens the way Settings → Open files and links says, at it.
+function openVaultLink(f){
+ if(!vaultOn()){toast('The Vault is off. '+turnOnHint());return;}
+ vaultSetFocus(f);
+ if(vaultView&&$('#vault-main'))return vaultApplyFocus(vaultTakeFocus());
+ openIdPreferred('vault','pc-documents-open');
+}
+window.addEventListener('storage',e=>{if(e.key===VAULT_FOCUS_KEY&&e.newValue&&vaultView&&vaultSnap&&document.visibilityState==='visible')vaultApplyFocus(vaultTakeFocus());});
+const VAULT_MISSED_WHY={signin:'this device was signed out of Pocket',locked:'the Vault was locked',offline:'the device could not reach Pocket',gone:'the request was no longer waiting',error:'Pocket could not record it'};
+const vaultMissedLine=(why,tap)=>`Your ${tap==='deny'?'Deny':'Allow'} from the notification didn’t go through: ${VAULT_MISSED_WHY[why]||VAULT_MISSED_WHY.error}.`;
+function vaultFlash(el){
+ if(!el)return;el.classList.remove('vault-flash');void el.offsetWidth;el.classList.add('vault-flash');
+ el.scrollIntoView({block:'center',behavior:'auto'});setTimeout(()=>el.classList.remove('vault-flash'),2600);
+}
+function vaultApplyFocus(f){
+ const main=$('#vault-main');if(!f||!main||!vaultSnap||vaultIsLocked())return;
+ if(f.requests){const req=$('#vault-requests');if(req){req.scrollIntoView({block:'start'});req.querySelector('h2')?.focus({preventScroll:true});}return;}
+ if(f.item){
+  const i=vaultSnap.items.find(x=>x.name===f.item);
+  if(!i){toast(vaultSnap.trash.some(x=>x.name===f.item)?f.item+' was removed. It is under Removed for 30 days.':'There is no secret named '+f.item+' in the Vault.');return;}
+  if(vaultQuery.trim()&&!vaultMatches(i,vaultQuery.trim().toLowerCase())){vaultQuery='';const box=main.querySelector('#vault-query');if(box)box.value='';vaultApplyQuery(main);}
+  vaultFlash(main.querySelector(`.vault-secrets .vault-item[data-item="${CSS.escape(i.id)}"]`));
+  vaultSheet(i.id);return;
+ }
+ if(!f.request)return;
+ if(f.missed)vaultMissed.set(f.request,{why:f.missed,tap:f.tap});
+ const live=vaultRequests().find(r=>r.id===f.request);
+ if(live){
+  vaultNotice='';vaultPainted='';paintVaultView(); // the card now carries what happened to the notification's answer
+  const card=main.querySelector(`#vault-requests .vault-request[data-request="${CSS.escape(f.request)}"]`);
+  vaultFlash(card);card?.querySelector('h3')?.focus({preventScroll:true});return;
+ }
+ // No longer waiting: say what became of it rather than showing nothing.
+ const done=(vaultSnap.answered||[]).find(r=>r.id===f.request),names=done?.itemNames?.join(', ')||'';
+ const what=!done?'That request is no longer waiting. It was answered or it expired; if the agent still needs the secret, it will ask again.'
+  :done.decision==='once'||done.decision==='always'?`You already allowed ${names} ${rel(vaultTime(done.at))}.`
+  :done.decision==='deny'?`You already denied ${names} ${rel(vaultTime(done.at))}.`
+  :`The request for ${names} ${done.decision==='locked'?'ended when the Vault locked':'expired before it was answered'}. If the agent still needs it, it will ask again.`;
+ vaultNotice=(f.missed&&!(done&&['once','always','deny'].includes(done.decision))?vaultMissedLine(f.missed,f.tap)+' ':'')+what;
+ vaultPainted='';paintVaultView();
+ const n=main.querySelector('.vault-notice');if(n){n.scrollIntoView({block:'nearest'});n.focus({preventScroll:true});}
+}
+// The search box filters rows in place, so typing never rebuilds the list under the cursor.
+function vaultApplyQuery(root){
+ const q=vaultQuery.trim().toLowerCase(),rows=[...root.querySelectorAll('.vault-secrets .vault-item')];let n=0;
+ for(const row of rows){const i=vaultItemById(row.dataset.item),hit=!q||(Boolean(i)&&vaultMatches(i,q));row.hidden=!hit;if(hit)n++;}
+ const count=root.querySelector('[data-vault-count]');if(count)count.textContent=q?`${n} of ${rows.length}`:String(rows.length);
+ const none=root.querySelector('[data-vault-none]');if(none){none.hidden=!q||n>0;none.textContent=q&&!n?`No secrets match “${vaultQuery.trim()}”.`:'';}
+}
 // 1.40: passphrase mode. A locked Vault answers GET /api/vault with ready:false, locked:true and every other route 423.
 const vaultIsLocked=()=>Boolean(vaultSnap&&vaultSnap.ready===false&&vaultSnap.locked);
 const VAULT_LOCK_CHOICES=[[0,'Never'],[15,'15 minutes'],[60,'1 hour'],[480,'8 hours'],[1440,'24 hours']];
@@ -116,7 +195,7 @@ async function vaultAct(body,done){
 /* ---------- the list view ---------- */
 async function renderVault(view){
  Voice.onLeave?.();
- vaultView=view;vaultPainted='';if(typeof boardView!=='undefined')boardView=null;if(typeof docView!=='undefined')docView=null;if(typeof taskView!=='undefined')taskView=null;
+ vaultView=view;vaultPainted='';vaultNotice='';if(typeof boardView!=='undefined')boardView=null;if(typeof docView!=='undefined')docView=null;if(typeof taskView!=='undefined')taskView=null;
  const col=`<header class="bar">
    ${PANE?`<button class="icon" id="pane-main" aria-label="Make this the main view">${IC.swap}</button>`:SOLO?'':`<button class="icon" id="back" aria-label="Back">${IC.back}</button><button class="icon desk" id="railtog" aria-label="Show or hide the conversation list">${IC.panel}</button>`}
    <h1><span class="one" id="vtitle">Vault</span><span class="tag" id="vtag">Secrets agents use without seeing</span></h1>
@@ -137,15 +216,16 @@ async function renderVault(view){
  if(PANE)paneSay('route',{id:view,title:'Vault'});else if(SOLO)document.title='Vault · '+appName();else rememberOpenView(view,'Vault');
  paintVaultView();
  restoreViewPosition(view);
- if(vaultFocusRequests){vaultFocusRequests=false;const req=$('#vault-requests');if(req){req.scrollIntoView({block:'start'});req.querySelector('h2')?.focus({preventScroll:true});}}
+ vaultApplyFocus(vaultTakeFocus()); // 1.93: a link to one secret or request, or a push's #/vault/requests
 }
 function paintVaultView(){
  const main=$('#vault-main');if(!main||!vaultSnap||!vaultView)return;
  // The 30-second refresh must not rebuild the list under a finger or a focused button when nothing changed.
  if(vaultIsLocked()){document.querySelectorAll('.vault-field[data-shown]').forEach(vaultHideValue);vaultLoadLockInfo();} // a value shown before the lock goes
- const key=JSON.stringify([vaultSnap.ready,vaultSnap.locked,vaultSnap.access,vaultIsLocked()?vaultAutoLock:0,vaultSnap.items,vaultSnap.trash,vaultRequests()]);
+ const key=JSON.stringify([vaultSnap.ready,vaultSnap.locked,vaultSnap.access,vaultIsLocked()?vaultAutoLock:0,vaultSnap.items,vaultSnap.trash,vaultRequests(),vaultOrder(),vaultNotice,[...vaultMissed]]);
  if(key===vaultPainted&&main.querySelector('.vault-list-head'))return paintVaultBadges();
- const focused=document.activeElement&&main.contains(document.activeElement)?[...main.querySelectorAll('button,a,summary')].indexOf(document.activeElement):-1;
+ const focused=document.activeElement&&main.contains(document.activeElement)?[...main.querySelectorAll('button,a,summary,input,select')].indexOf(document.activeElement):-1;
+ const caret=document.activeElement?.id==='vault-query'?document.activeElement.selectionStart:null;
  const open=[...main.querySelectorAll('details')].map(d=>d.open);
  vaultPainted=key;
  main.innerHTML=vaultListHTML();
@@ -153,14 +233,17 @@ function paintVaultView(){
  bindVaultRows(main);
  main.querySelector('#vt-add')?.addEventListener('click',()=>vaultEditor(null));
  main.querySelector('#vt-unlock')?.addEventListener('click',()=>vaultUnlockSheet());
- if(focused>=0)main.querySelectorAll('button,a,summary')[focused]?.focus({preventScroll:true});
+ const q=main.querySelector('#vault-query');if(q)q.oninput=()=>{vaultQuery=q.value;vaultApplyQuery(main);};
+ const order=main.querySelector('#vault-order');if(order)order.onchange=()=>{vaultSetOrder(order.value);repaintVault();};
+ vaultApplyQuery(main);
+ if(focused>=0){const el=main.querySelectorAll('button,a,summary,input,select')[focused];el?.focus({preventScroll:true});if(el&&caret!==null&&el.id==='vault-query')try{el.setSelectionRange(caret,caret);}catch{}}
  paintVaultBadges();
  if(typeof paintOpenSessions==='function')paintOpenSessions();
 }
 // The kind is drawn as an icon; screen readers get the word instead.
 function vaultFactsHTML(i){
  const host=vaultHost(i.url),tags=(i.tags||[]).join(', ');
- const facts=[host?`<span>${esc(host)}</span>`:'',tags?`<span>${esc(tags)}</span>`:'',`<span>${esc(vaultPolicyWord(i))}</span>`,
+ const facts=[vaultIsNew(i)?`<span>Added ${esc(rel(vaultTime(i.created)))}${i.addedIn?.sessionTitle?' in '+esc(i.addedIn.sessionTitle):''}</span>`:'',host?`<span>${esc(host)}</span>`:'',tags?`<span>${esc(tags)}</span>`:'',`<span>${esc(vaultPolicyWord(i))}</span>`,
   i.lastUsedAt?`<span>Used ${esc(rel(vaultTime(i.lastUsedAt)))}</span>`:'',
   i.expiresAt?`<span class="${i.expiring||vaultExpired(i)?'due-label':''}">${vaultExpired(i)?'Expired':'Expires'} ${esc(vaultDate(i.expiresAt))}</span>`:''].filter(Boolean);
  return `<span class="vault-sr">${esc(VAULT_KIND_WORD[i.kind]||'Secret')}, </span>`+facts.join('<span aria-hidden="true">·</span>');
@@ -168,7 +251,7 @@ function vaultFactsHTML(i){
 function vaultRowHTML(i){
  return `<div class="session-item vault-item ${i.expiring||vaultExpired(i)?'due':''}" data-item="${esc(i.id)}">
   <span class="vault-kind" aria-hidden="true">${vaultKindIcon(i.kind)}</span>
-  <button class="row" data-vault-open="${esc(i.id)}"><span class="body"><span class="title vault-name">${esc(i.name)}</span><span class="session-status">${vaultFactsHTML(i)}</span></span></button>
+  <button class="row" data-vault-open="${esc(i.id)}"><span class="body"><span class="title vault-name">${esc(i.name)}</span>${vaultIsNew(i)?'<span class="vault-new">New</span>':''}<span class="session-status">${vaultFactsHTML(i)}</span></span></button>
   <button class="session-more icon" data-vault-more="${esc(i.id)}" aria-label="Options for ${esc(i.name)}">${IC.more}</button></div>`;
 }
 function vaultTrashRowHTML(i){
@@ -178,14 +261,18 @@ function vaultTrashRowHTML(i){
   <span class="row"><span class="body"><span class="title vault-name">${esc(i.name)}</span><span class="session-status"><span>${esc(VAULT_KIND_WORD[i.kind]||'Secret')}</span>${until?`<span aria-hidden="true">·</span><span>Kept until ${esc(until)}</span>`:''}</span></span></span>
   <button class="chip vault-restore" data-vault-restore="${esc(i.id)}" aria-label="Restore ${esc(i.name)}">Restore</button></div>`;
 }
-// A request: which secret, the exact command, where it runs and who asked. Three answers, the approval card's look.
+// A request, said as a sentence (1.93, Damon: "<agent> wants to use <name> for this command"), then the exact command, where it
+// runs and when. Allow once is the filled accent button and Deny its outlined twin; Always allow stays the quieter choice.
 function vaultRequestHTML(r,where='main'){
- const hid=`vr-${where}-${r.id}`,who=r.session?(r.sessionTitle||(typeof sessionName==='function'?sessionName(r.session):'')||'A conversation'):'A terminal or code-server';
+ const hid=`vr-${where}-${r.id}`,title=r.session?(r.sessionTitle||(typeof sessionName==='function'?sessionName(r.session):'')||''):'';
+ const who=r.session?(title?`The agent in “${title}”`:'An agent'):'A terminal or code-server';
+ const fill=Array.isArray(r.argv)&&r.argv[0]==='pocket-fill',names=vaultRequestNames(r),missed=vaultMissed.get(r.id);
  return `<section class="vault-request" data-request="${esc(r.id)}" aria-labelledby="${esc(hid)}">
-  <h3 id="${esc(hid)}"><span class="vault-name">${esc(vaultRequestNames(r))}</span><span class="vault-request-when">${esc(rel(vaultTime(r.created)))}</span></h3>
+  <h3 id="${esc(hid)}" tabindex="-1"><span class="vault-request-who">${esc(who)}</span> wants to ${fill?'fill':'use'} <span class="vault-name">${esc(names)}</span> ${fill?'into a web page':'for this command'}</h3>
+  ${missed?`<p class="vault-request-missed" role="status">${esc(vaultMissedLine(missed.why,missed.tap))} Answer it here.</p>`:''}
   <code class="vault-cmd" tabindex="0" title="${esc(vaultCmd(r.argv))}">${esc(vaultCmd(r.argv))}</code>
-  <p class="vault-request-where">${r.cwd?`<span class="vault-path">${esc(projShort(r.cwd))}</span><span aria-hidden="true">·</span>`:''}<span>${esc(who)}</span></p>
-  <div class="approval-actions vault-request-actions"><button class="chip" data-answer="deny">Deny</button>${r.allowAlways===false?'':'<button class="chip" data-answer="always">Always allow</button>'}<button class="chip approval-allow" data-answer="once">Allow once</button></div>
+  <p class="vault-request-where">${r.cwd?`<span class="vault-path">${esc(projShort(r.cwd))}</span><span aria-hidden="true">·</span>`:''}<span>Asked ${esc(rel(vaultTime(r.created)))}</span></p>
+  <div class="approval-actions vault-request-actions"><button class="vault-answer vault-deny" data-answer="deny">Deny</button>${r.allowAlways===false?'':'<button class="chip vault-always" data-answer="always">Always allow</button>'}<button class="vault-answer vault-allow" data-answer="once">Allow once</button></div>
  </section>`;
 }
 function vaultLockedHTML(where='main'){
@@ -200,7 +287,10 @@ function vaultListHTML(){
  const reqs=vaultRequests(),items=vaultSnap.items,trash=vaultSnap.trash;
  return `<div class="session-home-head vault-list-head"><h2>Vault</h2><span class="project-head-actions"><button class="chip" id="vt-add">${IC.plus}Add secret</button></span></div>
   ${reqs.length?`<section class="session-group project-group vault-requests" id="vault-requests"><h2 tabindex="-1">Requests <span>${reqs.length} waiting</span></h2><p class="sheet-help vault-requests-help">An agent wants to run a command with a secret.${reqs.some(r=>r.allowAlways!==false)?' Always allow remembers this exact command and folder for that secret.':''}</p>${reqs.map(r=>vaultRequestHTML(r)).join('')}</section>`:''}
-  ${items.length?`<section class="session-group project-group"><h2>Secrets <span>${items.length}</span></h2>${items.map(vaultRowHTML).join('')}</section>`
+  ${vaultNotice?`<p class="vault-notice" role="status" tabindex="-1">${esc(vaultNotice)}</p>`:''}
+  ${items.length?`<div class="documents-tools vault-tools"><div class="session-search">${IC.search}<input type="search" id="vault-query" placeholder="Search secrets" aria-label="Search secrets by name, kind, tag or website" value="${esc(vaultQuery)}" autocomplete="off" spellcheck="false" enterkeyhint="search"></div>
+   <label class="voice-field vault-order">Order<select id="vault-order"><option value="new"${vaultOrder()==='new'?' selected':''}>Newest first</option><option value="name"${vaultOrder()==='name'?' selected':''}>A–Z</option></select></label></div>
+   <section class="session-group project-group vault-secrets"><h2>Secrets <span data-vault-count>${items.length}</span></h2>${vaultSorted(items).map(vaultRowHTML).join('')}<p class="sheet-help project-empty" data-vault-none role="status" hidden></p></section>`
    :'<p class="sheet-help project-empty">No secrets yet. Add one here, or from a conversation with Store in the Vault. Agents use them by name and never see the value.</p>'}
   ${trash.length?`<details class="session-group project-group settings-details"><summary><h2>Removed <span>${trash.length}</span></h2></summary><p class="sheet-help vault-requests-help">Kept for 30 days, then deleted. A removed name can't be reused until then.</p>${trash.map(vaultTrashRowHTML).join('')}</details>`:''}`;
 }
@@ -211,7 +301,7 @@ function bindVaultRows(root){
  root.querySelectorAll('[data-request]').forEach(card=>card.querySelectorAll('[data-answer]').forEach(b=>b.onclick=async()=>{
   const r=vaultSnap?.requests.find(x=>x.id===card.dataset.request);if(!r)return;
   card.querySelectorAll('button').forEach(x=>x.disabled=true);
-  const decision=b.dataset.answer;
+  const decision=b.dataset.answer;vaultMissed.delete(r.id);
   const out=await vaultAct({action:'answer',request:r.id,decision},decision==='deny'?'Denied':decision==='always'?'Allowed. This command is remembered for '+vaultRequestNames(r):'Allowed once');
   if(!out){if(card.isConnected)card.querySelectorAll('button').forEach(x=>x.disabled=false);return;}
   loadVault(true).then(repaintVault).catch(()=>{}); // recipes and last use come from the server
@@ -745,7 +835,7 @@ function railVaultHTML(){
  const reqs=vaultRequests();
  return `<div class="rail-projects rail-vault"><div class="rail-project-actions"><button class="chip" id="rail-vault-add">${IC.plus}Add secret</button><a class="chip" href="${viewHref('vault')}" data-view-link>All</a></div>
   ${reqs.length?`<section class="vault-requests" aria-label="Requests waiting">${reqs.map(r=>vaultRequestHTML(r,'rail')).join('')}</section>`:''}
-  ${vaultSnap.items.length?vaultSnap.items.slice(0,60).map(vaultRowHTML).join(''):'<p class="sheet-help">No secrets yet. Add one, or use Store in the Vault in a conversation.</p>'}
+  ${vaultSnap.items.length?vaultSorted(vaultSnap.items).slice(0,60).map(vaultRowHTML).join(''):'<p class="sheet-help">No secrets yet. Add one, or use Store in the Vault in a conversation.</p>'}
   ${vaultSnap.trash.length?`<a class="rail-done-link" href="${viewHref('vault')}" data-view-link>${vaultSnap.trash.length} removed</a>`:''}</div>`;
 }
 function paintRailVault(){

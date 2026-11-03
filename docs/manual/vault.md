@@ -29,6 +29,13 @@ In Assistant mode the **Vault** switch is under **Settings → Features**; the r
 
 Open the Vault from the rail's **Vault** entry, the **Vault** chip on the home screen, or `#/vault`. It opens like Tasks: as a tab, beside a conversation, or in a window of its own.
 
+### Find a secret
+
+- **Order.** The list is **Newest first** by default; switch **Order** to **A–Z** to sort by name. The choice is kept on each device.
+- **New.** A secret stored in the last 24 hours carries a **New** mark, and its line says when and in which conversation it was added.
+- **Search.** **Search secrets** narrows the list as you type. It matches the name, the kind, tags, the website and the conversation that stored it; with several words, all must match.
+- **Links.** `#/vault/item/<name>` opens the Vault with that secret's sheet open and its row marked. When an agent stores a secret from a conversation, the conversation shows a card for it under the next reply; tap it to open the secret. Agents link a secret the same way in their replies.
+
 ### Add a secret
 
 1. Tap **Add secret** (in the Vault view or the rail list).
@@ -78,8 +85,8 @@ Each secret can override the default with **Change who can use it** on its sheet
 
 When a command needs your approval, Pocket files a **request** and tells you three ways. Any one of them answers it:
 
-- **Push notification.** A "Vault request" notification with **Allow** and **Deny**. **Allow** here allows once; it never saves the command. Turn these on per device in **Settings → Notifications & voice → Vault requests**.
-- **The Vault view.** Requests appear at the top with the secret, the exact command, the folder and which conversation asked. Choose **Deny**, **Always allow** or **Allow once**.
+- **Push notification.** "Allow *name*?", with which conversation wants it and the command, and **Allow** and **Deny** buttons. **Allow** on the notification allows once; it never saves the command. Tapping the notification itself does not answer: it opens the Vault at that request. If an **Allow** or **Deny** from the notification cannot be recorded (the device was signed out, the Vault was locked, the device was offline, or the request had already ended), Pocket opens the request and says why, so you can answer it there. Turn these on per device in **Settings → Notifications & voice → Vault requests**.
+- **The Vault view.** Each request is one sentence, such as *The agent in "Staging site" wants to use staging-wp for this command*, with the exact command, the folder and when it asked. **Allow once** is the orange button; **Deny** sits beside it, and **Always allow** between them when the secret allows it. A request that was already answered, expired or ended when the Vault locked says so when its notification is opened.
 - **The conversation.** The agent ends its reply with suggested replies such as *Allow billing-api for this command* and *Deny billing-api*. Tap one or type it. Pocket also accepts *Always allow billing-api for this command*, *approve*, *don't allow*, and a bare *Allow* or *Deny* when that conversation has exactly one request waiting. Only your own messages in the conversation that raised the request count, and the message is still delivered to the agent.
 
 **Always allow** saves the exact command (program, every argument and the folder) for that secret, under **Approved commands** on its sheet, where you can remove it. A changed argument is a new command and asks again. A request expires after 15 minutes.
@@ -232,7 +239,7 @@ pocket-vault run --env PORTAL_USER=vendor-portal.username --env PORTAL_PASS=vend
 
 Keep commands stable: an approved command is an exact match on program, arguments and folder. `--cwd` defaults to your current directory.
 
-**Storing a secret you meet.** When a secret appears in a message, file or tool result, store it at once with `put` (the value from `--stdin`, `--from-file` or `--from-env`, never the command line), use its name from then on, and tell the user in one or two sentences that it was seen in the conversation and may need rotating. `put` is create-only: an existing name (including a removed one) is refused, and agents cannot change, rotate or remove a secret. A new secret follows the Vault default policy.
+**Storing a secret you meet.** When a secret appears in a message, file or tool result, store it at once with `put` (the value from `--stdin`, `--from-file` or `--from-env`, never the command line), use its name from then on, and tell the user in one or two sentences that it was seen in the conversation and may need rotating. Write the name as a Markdown link to `/#/vault/item/<name>` so it opens the secret; the conversation also shows a card for it. `put` is create-only: an existing name (including a removed one) is refused, and agents cannot change, rotate or remove a secret. A new secret follows the Vault default policy.
 
 **Browser fills.** Put `{{vault:name.field}}` as the text in `browser_type` or `browser_fill_form`. If the reply says the Vault is asking the owner, tell them and call the same tool with the same arguments once they allow it. After a fill, use `browser_snapshot` instead of screenshots. If the placeholder appears literally on the page, the relay is not in place: stop and tell the owner.
 
@@ -251,6 +258,7 @@ Keep commands stable: an approved command is an exact match on program, argument
 | **Remove passphrase** fails: "POCKET_VAULT_KEY is not set" | Passphrase mode with no server key | Add `POCKET_VAULT_KEY` to `.env`, restart, unlock, then remove the passphrase. |
 | Unlock says "Too many tries. Wait an hour." | Ten wrong passphrases or **Restore key** keys in this signed-in session within an hour of the first, or 50 across all sessions | Wait, then try again. A right passphrase or key clears the count. |
 | Turning the Vault on fails: "This install has no .env file to keep the Vault key in" | `POCKET_ENV_FILE` is set to empty, so Pocket has nowhere to save a key | Set `POCKET_VAULT_KEY` yourself (`openssl rand -base64 32`) and restart. |
+| Tapping **Allow** on a notification opens the Vault with "Your Allow from the notification didn't go through" | The answer could not be recorded; the line says why (signed out, locked, offline, or the request had ended) | Answer the request on that card. Sign in again on the device if it says signed out. |
 | An agent's run answers `pending` and nothing arrives on the phone | Push is off on that device, or **Vault requests** is off for it | Answer in the Vault view or the conversation; turn on push in **Settings → Notifications & voice**. |
 | `pocket-vault wait` says the request does not exist or has expired | More than 15 minutes passed, or Pocket restarted | Run the command again to file a new request. |
 | "That request was raised by another session" or "already used" | A request belongs to one conversation and serves one continuation | Run the command again from the conversation that needs it. |
