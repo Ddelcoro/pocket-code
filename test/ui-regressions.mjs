@@ -1475,12 +1475,40 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    // The list: the waiting request above the secrets, a badge on the rail switch, the login's expiry in amber.
    await page.goto(base+'/#/vault');await page.reload();await page.waitForSelector('.vault-item');
    const list=await page.evaluate(()=>({names:[...document.querySelectorAll('#vault-main .vault-item [data-vault-open] .title')].map(e=>e.textContent),requests:[...document.querySelectorAll('#vault-main .vault-request h3 .vault-name')].map(e=>e.textContent),badge:document.querySelector('[data-vault-badge]')?.textContent,rail:Boolean(document.querySelector('[data-rail-view="vault"]')),due:document.querySelector('.vault-item.due .due-label')?.textContent,tab:document.querySelector('.open-session.current a')?.textContent}));
-   assert.deepEqual(list.names,['acme-oauth','bank-recovery','square-hooks','vendor-portal','zoho-books']);assert.deepEqual(list.requests,['zoho-books']);assert.equal(list.badge,'1');assert.equal(list.rail,true,'the rail switch shows Vault');assert.match(list.due,/^Expires /);assert.equal(list.tab,'Vault');
+   assert.deepEqual(list.names,['square-hooks','acme-oauth','bank-recovery','vendor-portal','zoho-books'],'newest first by default');assert.deepEqual(list.requests,['zoho-books']);assert.equal(list.badge,'1');assert.equal(list.rail,true,'the rail switch shows Vault');assert.match(list.due,/^Expires /);assert.equal(list.tab,'Vault');
    await scan('vault-list-desktop');await page.screenshot({path:path.join(out,'vault-list-desktop.png')});
+   // 1.93 (Damon): the request is one plain sentence; Allow is the brand orange beside a matching Deny.
+   const ask=await page.evaluate(()=>{const c=document.querySelector('#vault-main .vault-request'),a=c.querySelector('.vault-allow'),p=document.createElement('i');p.style.color='var(--clay)';document.body.append(p);const clay=getComputedStyle(p).color;p.remove();
+    return {text:c.querySelector('h3').textContent.replace(/\s+/g,' ').trim(),allow:a?.dataset.answer,allowText:a?.textContent,deny:c.querySelector('.vault-deny')?.dataset.answer,bg:getComputedStyle(a).backgroundColor,clay,h:a.getBoundingClientRect().height};});
+   assert.equal(ask.text,'The agent in “Warehouse stock report” wants to use zoho-books for this command');
+   assert.equal(ask.allow,'once');assert.equal(ask.allowText,'Allow once');assert.equal(ask.deny,'deny');assert.equal(ask.bg,ask.clay,'Allow is the brand orange');assert.ok(ask.h>=44,'Allow is a full-size button');
+   // Order: A–Z on request, remembered on the device; the search narrows the list by name, kind or tag.
+   const shownNames=()=>page.$$eval('#vault-main .vault-secrets .vault-item:not([hidden]) [data-vault-open] .title',e=>e.map(x=>x.textContent));
+   await page.select('#vault-order','name');await page.waitForFunction(()=>document.querySelector('#vault-main .vault-secrets .vault-item .title')?.textContent==='acme-oauth');
+   assert.deepEqual(await shownNames(),['acme-oauth','bank-recovery','square-hooks','vendor-portal','zoho-books']);assert.equal(await page.evaluate(()=>localStorage.getItem('pc-vault-order')),'name');
+   await page.select('#vault-order','new');await page.waitForFunction(()=>document.querySelector('#vault-main .vault-secrets .vault-item .title')?.textContent==='square-hooks');
+   const query=async q=>{await page.$eval('#vault-query',(e,q)=>{e.value=q;e.dispatchEvent(new Event('input',{bubbles:true}));},q);};
+   await query('billing');assert.deepEqual(await shownNames(),['zoho-books'],'a tag matches');assert.equal(await page.$eval('[data-vault-count]',e=>e.textContent),'1 of 5');
+   await query('login vendor');assert.deepEqual(await shownNames(),['vendor-portal'],'every word must match');
+   await query('nothing-like-this');assert.deepEqual(await shownNames(),[]);assert.equal(await page.$eval('[data-vault-none]',e=>e.hidden?'':e.textContent),'No secrets match “nothing-like-this”.');
+   await query('');assert.equal((await shownNames()).length,5);
+   // The notification body opens that request; an Allow from the notification that failed says so on the card.
+   const rid=await page.evaluate(()=>vaultSnap.requests[0].id);
+   await page.goto(base+'/#/vault/request/'+rid+'?missed=signin&tap=allow');await page.waitForSelector('#vault-main .vault-request-missed');
+   assert.equal(await page.evaluate(()=>location.hash),'#/vault','the deep link settles on the Vault');
+   assert.match(await page.$eval('#vault-main .vault-request-missed',e=>e.textContent),/Your Allow from the notification didn’t go through: this device was signed out of Pocket\./);
+   assert.equal(await page.evaluate(()=>document.activeElement?.closest('.vault-request')!==null),true,'the request has focus');
+   // A link to one secret opens its sheet and marks its row.
+   await page.goto(base+'/#/vault/item/vendor-portal');await page.waitForSelector('.vault-sheet');
+   assert.equal(await page.evaluate(()=>document.querySelector('.vault-item.vault-flash [data-vault-open] .title')?.textContent),'vendor-portal');
+   await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.vault-sheet'));
    // Always allow answers the request and saves the command on the item.
    await clickControl(page,'#vault-main .vault-request [data-answer="always"]');await page.waitForFunction(()=>!document.querySelector('#vault-main .vault-request'));
    await page.waitForFunction(()=>vaultSnap.items.find(i=>i.name==='zoho-books')?.recipes.length===2);
    assert.equal(await page.$eval('[data-vault-badge]',e=>e.hidden),true,'no request, no badge');
+   // 1.93: the notification for an answered request opens on what happened to it.
+   await page.goto(base+'/#/vault/request/'+rid);await page.waitForSelector('#vault-main .vault-notice');
+   assert.match(await page.$eval('#vault-main .vault-notice',e=>e.textContent),/^You already allowed zoho-books /);
    // The sheet: a value only on Show, gone from the page once it closes, never in storage.
    const id=name=>page.evaluate(n=>(vaultSnap.items.find(i=>i.name===n)||vaultSnap.trash.find(i=>i.name===n)).id,name);
    const zoho=await id('zoho-books');await clickControl(page,`[data-vault-open="${zoho}"]`);await page.waitForSelector('.vault-sheet [data-history] ul');
@@ -1518,6 +1546,17 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    await clickControl(page,'[data-vault-home]');await page.waitForSelector('.vault-item');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal overflow at 390');
    await scan('vault-list-mobile');await page.screenshot({path:path.join(out,'vault-list-mobile.png')});
+   // 1.93 (Damon): a secret an agent stores from a conversation is marked New, and the conversation gets a card that opens it.
+   await page.setViewport({width:1440,height:900});
+   await page.evaluate(s=>fetch('/api/vault/agent-add',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'staging-wp',kind:'login',values:{username:'ops',password:'wp-fixture-pass-5512'},...s})}),{session:rows[0].id,sessionTitle:rows[0].title});
+   await page.goto(base+'/#/chat/'+rows[0].id);await page.waitForSelector('.file-card[data-card-vault]');
+   const card=await page.$eval('.file-card[data-card-vault]',e=>({name:e.querySelector('.file-card-name').textContent,href:e.querySelector('a').getAttribute('href'),html:e.outerHTML}));
+   assert.equal(card.name,'staging-wp');assert.equal(new URL(card.href,base).hash,'#/vault/item/staging-wp');assert.equal(card.html.includes('wp-fixture-pass-5512'),false,'no value on the card');
+   await clickControl(page,'.file-card[data-card-vault] a');await page.waitForSelector('.vault-sheet');
+   assert.equal(await page.$eval('.vault-sheet h2',e=>e.textContent.length>0),true);
+   await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.vault-sheet'));
+   const fresh=await page.evaluate(()=>{const r=[...document.querySelectorAll('#vault-main .vault-secrets .vault-item')][0];return {name:r?.querySelector('[data-vault-open] .title')?.textContent,mark:r?.querySelector('.vault-new')?.textContent,facts:r?.textContent.replace(/\s+/g,' ')};});
+   assert.equal(fresh.name,'staging-wp','the newest is on top');assert.equal(fresh.mark,'New');assert.match(fresh.facts,/Added .* in Warehouse stock report/);
    await page.setViewport({width:1440,height:900});settings.vault=false;
   });
   await check('Vault custom fields (1.39.1): Credentials and custom fields in the sheet, the editor adds them, an edit removes one, a bad name is refused inline',async()=>{

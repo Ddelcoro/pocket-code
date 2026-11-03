@@ -346,6 +346,24 @@ test('request binding (1.73.4): action, caller, one use, the policy as it is now
   fs.rmSync(dir,{recursive:true,force:true});
 });
 
+test('finding a secret (1.93): an agent\'s add names its conversation; answered requests stay findable for the owner only',()=>{
+  const dir=tmp();let clock=Date.parse('2026-11-03T12:00:00Z');const s=new VaultStore(path.join(dir,'v.enc'),{key:parseKey(newKey()),now:()=>clock});
+  const a=s.act({action:'add',name:'ptvip-staging',kind:'login',values:{username:'u',password:'staging-pass-77'}},{actor:'agent',session:'s-1',sessionTitle:'Fix the staging login'});
+  assert.deepEqual(a.addedIn,{session:'s-1',sessionTitle:'Fix the staging login'});
+  const o=s.act({action:'add',name:'owner-made',kind:'token',values:{value:'owner-token-123'}});assert.equal('addedIn' in o,false,'an add without a conversation names none');
+  assert.deepEqual(s.snapshot({owner:true}).items.find(i=>i.name==='ptvip-staging').addedIn,{session:'s-1',sessionTitle:'Fix the staging login'});
+  const b=s.resolveBindings({P:'ptvip-staging.password'}),c={...s.checkCommand(['true'],dir),action:'run'};
+  const r=s.request({bound:b,cmd:c,need:s.decide(b,c),env:{P:'ptvip-staging.password'},by:'agent',session:'s-1',sessionTitle:'Fix the staging login'});
+  assert.deepEqual(s.snapshot({owner:true}).answered,[],'nothing answered yet');
+  s.answer(r.id,'once');clock+=60_000;
+  const snap=s.snapshot({owner:true});assert.equal(snap.requests.length,0);
+  assert.deepEqual(snap.answered,[{id:r.id,itemNames:['ptvip-staging'],decision:'once',at:'2026-11-03T12:00:00Z'}]);
+  assert.deepEqual(s.snapshot({owner:false}).answered,[],'an agent does not see the answers');
+  assert.equal(JSON.stringify(snap).includes('staging-pass-77'),false,'no value anywhere in the snapshot');
+  clock+=LIMITS.requestTtlMs;assert.deepEqual(s.snapshot({owner:true}).answered,[],'gone 15 minutes after the answer');
+  fs.rmSync(dir,{recursive:true,force:true});
+});
+
 test('agentEnv removes the vault key with the other daemon secrets',()=>{
   assert.deepEqual(agentEnv({PATH:'/bin',POCKET_VAULT_KEY:'k',POCKET_PASSWORD:'p'}),{PATH:'/bin'});
 });

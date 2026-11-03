@@ -1,6 +1,6 @@
 /* Pocket Code SW — cache the shell, never the API; handle push notifications */
-const V = 'pc-v185';
-const SHELL = ['/theme.js?v=185', '/', '/release.json?v=185', '/app.css?v=185', '/app.js?v=185', '/cli-updates.js?v=185', '/workspace.js?v=185', '/sidechat.js?v=185', '/projects.js?v=185', '/documents.js?v=185', '/links.js?v=185', '/tasks.js?v=185', '/inbox.js?v=185', '/vault.js?v=185', '/secret-detect.js?v=185', '/phrases.js?v=185', '/approvals.js?v=185', '/split.js?v=185', '/tips.js?v=185', '/format.js?v=185', '/voice-text.js?v=185', '/voice.js?v=185', '/voice-worklet.js?v=185', '/vendor/marked.js?v=185', '/vendor/purify.js?v=185', '/manifest.webmanifest', '/icon-192.png'];
+const V = 'pc-v186';
+const SHELL = ['/theme.js?v=186', '/', '/release.json?v=186', '/app.css?v=186', '/app.js?v=186', '/cli-updates.js?v=186', '/workspace.js?v=186', '/sidechat.js?v=186', '/projects.js?v=186', '/documents.js?v=186', '/links.js?v=186', '/tasks.js?v=186', '/inbox.js?v=186', '/vault.js?v=186', '/secret-detect.js?v=186', '/phrases.js?v=186', '/approvals.js?v=186', '/split.js?v=186', '/tips.js?v=186', '/format.js?v=186', '/voice-text.js?v=186', '/voice.js?v=186', '/voice-worklet.js?v=186', '/vendor/marked.js?v=186', '/vendor/purify.js?v=186', '/manifest.webmanifest', '/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -47,12 +47,16 @@ const openUrl = url => clients.matchAll({ type: 'window', includeUncontrolled: t
   for (const c of list) if (c.frameType !== 'nested' && 'focus' in c) { c.navigate(url); return c.focus(); }
   return clients.openWindow(url);
 });
-// Allow answers once (never Always allow from a lock screen); Deny denies. If the answer does not land (signed out,
-// expired, already answered, offline), open the Requests list instead so the owner sees what happened.
-const answerVault = (request, action, url) => fetch('/api/vault/act', {
-  method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ action: 'answer', request, decision: action === 'allow' ? 'once' : 'deny' }),
-}).then(r => { if (!r.ok) return openUrl(url); }, () => openUrl(url));
+// Allow answers once (never Always allow from a lock screen); Deny denies. If the answer does not land, Pocket opens at
+// that request and says why (1.93, Damon): signed out, the Vault locked, already answered or expired, or offline.
+const missedWhy = status => status === 401 || status === 403 ? 'signin' : status === 423 ? 'locked' : status === 404 || status === 409 ? 'gone' : 'error';
+const answerVault = (request, action, url) => {
+  const missed = why => openUrl('/#/vault/request/' + encodeURIComponent(request) + '?missed=' + why + '&tap=' + (action === 'allow' ? 'allow' : 'deny'));
+  return fetch('/api/vault/act', {
+    method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'answer', request, decision: action === 'allow' ? 'once' : 'deny' }),
+  }).then(r => { if (!r.ok) return missed(missedWhy(r.status)); }, () => missed('offline'));
+};
 // 1.50: Tomorrow moves a due task or project reminder to 9 AM tomorrow in this device's zone; Done finishes a task.
 // Both go through the ordinary routes with the signed-in cookie; if the answer does not land, Pocket opens instead.
 const tomorrowNine = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.toISOString(); };

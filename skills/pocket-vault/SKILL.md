@@ -132,8 +132,9 @@ to every item, and an item can override it:
 - **Ask every time**: every run waits for the owner.
 - **Only you** (an item setting): agents cannot use the item. `run` fails and says to ask the owner.
 
-When a run must wait, the owner gets a "Vault request" push with **Allow** and **Deny**
-buttons. `run` waits up to 90 seconds; with no answer yet it prints `pending <request id>` and
+When a run must wait, the owner gets an "Allow <name>?" push naming your conversation and
+the command, with **Allow** and **Deny** buttons; tapping the notification opens that request
+in the Vault. `run` waits up to 90 seconds; with no answer yet it prints `pending <request id>` and
 exits with code 4.
 
 **On `pending`:** say in one line that the command is waiting for the owner's approval
@@ -177,6 +178,9 @@ printf '%s' "$TWILIO_AUTH" | pocket-vault put twilio-auth --kind token --stdin \
 - **Tell the user**, in one or two sentences: what you stored and under which name, and that
   the value was seen in this conversation (so it has already reached the model provider and
   this transcript) and they may want to rotate it. Do not repeat the value, even partly.
+  Write the name as a link that opens it in the Vault, `[name](/#/vault/item/name)`, for
+  example `Stored as [stripe-live](/#/vault/item/stripe-live)`. The conversation also shows a
+  card for it under your reply.
 - Do not leave the secret behind: if you wrote it to a temporary file to store it, remove the
   file. Do not edit a user's own config files to remove a secret unless they ask.
 

@@ -204,7 +204,7 @@ export class VaultStore {
     const skipped = [], added = [], legacy = !(data.version >= STORE_SCHEMA), next = [...this.items];
     for (const raw of data.items) {
       if (!raw || typeof raw !== 'object') continue;
-      const i = this.normalize({ ...raw, ...(legacy && raw.policy === 'ask' ? { policy: 'default' } : {}), id: shortId(), lastUsedAt: null, lastUsedBy: null, trashedAt: null });
+      const i = this.normalize({ ...raw, ...(legacy && raw.policy === 'ask' ? { policy: 'default' } : {}), id: shortId(), addedIn: undefined, lastUsedAt: null, lastUsedBy: null, trashedAt: null }); // 1.93: the conversation that added it belongs to the other install
       if (!NAME_RE.test(i.name || '')) continue;
       if (next.some(x => x.name === i.name)) { skipped.push(i.name); continue; }
       if (next.length >= LIMITS.items) throw fail(`You can keep up to ${LIMITS.items} items.`, 409);
@@ -269,7 +269,10 @@ export class VaultStore {
     const live = this.items.filter(i => !i.trashedAt).sort((a, b) => a.name.localeCompare(b.name)).map(i => this.view(i, { owner, now }));
     const trash = owner ? this.items.filter(i => i.trashedAt).sort((a, b) => Date.parse(b.trashedAt) - Date.parse(a.trashedAt)).map(i => this.view(i, { owner, now })) : [];
     const requests = [...this.requests.values()].filter(r => !r.answer).map(r => this.requestView(r));
-    return { version: 1, now, ready: true, access: ACCESS.includes(this.access()) ? this.access() : 'once', items: live, trash, requests, openRequests: requests.length };
+    // 1.93: requests answered or expired in the last 15 minutes, as id, answer and time only, so a link to one (a notification
+    // tapped late, an Allow that did not go through) can say what happened to it instead of finding nothing.
+    const answered = owner ? [...this.requests.values()].filter(r => r.answer).map(r => ({ id: r.id, itemNames: r.itemNames, decision: r.answer.decision, at: r.answer.at })) : [];
+    return { version: 1, now, ready: true, access: ACCESS.includes(this.access()) ? this.access() : 'once', items: live, trash, requests, answered, openRequests: requests.length };
   }
   touch(i) { i.updated = iso(this.now()); i.revision += 1; }
 
@@ -289,7 +292,7 @@ export class VaultStore {
       const { values, custom } = this.checkValues({ kind, custom: [] }, input.values, { all: true });
       const item = { id: shortId(), name, kind, custom, values, url: str(input.url, LIMITS.url), notes: owner ? notesIn(input.notes) : '', tags: this.checkTags(input.tags),
         policy: owner && POLICIES.includes(input.policy) ? input.policy : 'default', recipes: [], expiresAt: this.checkWhen(input.expiresAt),
-        created: at, updated: at, by, lastUsedAt: null, lastUsedBy: null, trashedAt: null, revision: 1 };
+        created: at, updated: at, by, ...(session ? { addedIn: { session: str(session, 80), sessionTitle: str(sessionTitle, 200) } } : {}), lastUsedAt: null, lastUsedBy: null, trashedAt: null, revision: 1 };
       this.audit({ action: 'put', item: item.id, name, by, session, sessionTitle });
       const next = [...this.items, item]; this.save({ items: next }); this.items = next;
       return this.view(item, { owner });

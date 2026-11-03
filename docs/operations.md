@@ -506,8 +506,14 @@ The command runs with the daemon's permissions, outside any sandbox the agent's 
 Under Codex's Review mode the read-only sandbox cannot reach the daemon, so `pocket-vault
 run` works only under Full access there.
 
-**Requests.** A command that needs the owner's approval is pushed to the owner's devices as a
-"Vault request" (with web push configured) and waits in the Vault view. A request is answered
+**Requests.** A command that needs the owner's approval is pushed to the owner's devices (with
+web push configured) as "Allow <name>?" with the asking conversation and the command, and waits
+in the Vault view. Since 1.93 the notification's body opens `#/vault/request/<id>` and never
+answers; only its **Allow** or **Deny** action does. When the service worker's answer is refused
+(401/403 signed out, 423 locked, 404/409 gone, or offline) it opens that request with
+`?missed=<why>` so the card says the answer did not go through, and the daemon logs
+`vault answer request=<id> refused <status>`. The owner's snapshot also lists answered requests
+(id, names, decision, time) for their 15 minutes, so an opened notification can say what happened. A request is answered
 once and expires after 15 minutes. A pending request lives in the daemon's memory only (a restart drops it; the agent is told the request no longer exists); the recipes an answer of *Always allow* saves are kept inside `vault.enc`. A request records what it is for (`action`: `run` or `fill`) and who raised it (1.73.4); a continuation (`POST /api/vault/wait`, or `/api/vault/release` with `request`) is refused with 409 `request_mismatch` for the other kind of use, 403 `request_mismatch` from another session, 409 `request_used` once it has been used, and 409 `request_stale` when an item or a policy changed since the answer. Recipes carry the action; older ones are read from their command.
 
 **Typed by Pocket (1.43).** `scripts/pocket-mcp-proxy.mjs [--name <server>] -- <MCP server command…>` is a

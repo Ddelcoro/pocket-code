@@ -49,6 +49,8 @@ function openLinkPreferred(a,e){
  if(!plainClick(e))return false;
  let u;try{u=new URL(a.href,location.href);}catch{return false;}
  if(!['http:','https:'].includes(u.protocol)||u.origin!==location.origin)return false; // an outside website is the browser's
+ const vf=typeof vaultFocusOf==='function'&&['/','/index.html'].includes(u.pathname)?vaultFocusOf(u.hash):null; // 1.93: one secret or request in the Vault
+ if(vf){e.preventDefault();openVaultLink(vf);return true;}
  const viewId=pocketViewOf(u);
  if(viewId){e.preventDefault();openIdPreferred(viewId,viewId.startsWith('projects')?'pc-projects-open':'pc-documents-open');return true;}
  if(/^\/api\/session\/[^/]+\/artifact$/.test(u.pathname)&&u.searchParams.get('inline')!=='1'||u.searchParams.get('download')==='1')return false; // a download stays a download (1.61: an inline view of a file opens like any link)

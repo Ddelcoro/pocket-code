@@ -318,6 +318,21 @@ key requirement in words with the generation command in mono, and shows a rotate
 Rendered checks: no horizontal overflow at 390 for the list, an item sheet and a request;
 axe clean on each; the detector reports only the app-shell baseline.
 
+**Finding and answering (1.93, Damon).** Pinned Operate refinement: variance 2, motion 2,
+density 6; existing tokens only. The list sorts **Newest first** (an **Order** select beside
+**Search secrets** offers A–Z), reusing the Files toolbar (`.documents-tools`,
+`.session-search`, `.voice-field`). A secret under a day old carries a small clay-outline
+**New** pill, and its facts line leads with where it was added. A deep link marks its row
+with `.vault-flash`: the raised surface and a 3px inset clay bar, fading over 2.6s (no
+transition under reduced motion). A request reads as one sentence, *The agent in "…" wants to
+use **name** for this command*, at body size with the who and the name in 650 weight; it is
+the only place the Vault uses a filled accent button: **Allow once** is `--clay` with
+`--on-accent` text, 44px tall, beside an outlined **Deny** of the same size, with *Always
+allow* staying a chip between them. A notice that a notification's answer failed, or that a
+request already ended, is a bordered `--warn` line, never a toast. A secret a conversation
+stored gets a file card (`.vault-card`) with the kind icon in the thumbnail slot and "In the
+Vault" where Files says "In Files".
+
 ## Appearance modes (1.38)
 
 Pinned Operate refinement: variance 3, motion 2, density 7. Preserve layouts, native type,
