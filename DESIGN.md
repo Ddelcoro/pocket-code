@@ -8,6 +8,16 @@ terminal green-on-black. Chat reads like a document. The machine's activity (too
 visibly *machinery*: small monospace ledger lines, dim, truthful. One living element: the
 clay ember that breathes while Claude works.
 
+## A pin on every conversation row (1.94, Damon)
+
+Pinned Operate refinement (design-studio → impeccable): variance 2, motion 2, density 8; existing tokens and the
+existing pin icon, no new colour. Read: someone who organizes by pinning should pin or unpin in one click, without the
+⋯ sheet, and the list should not get louder for people who never pin. Each row's trailing controls read pin, grip
+(pinned rows, from 900px) and ⋯. The pin is a 44px target (36×44 with a fine pointer, so a pinned row in the 320px
+rail keeps its title room): the outline pin in `--faint` at 55% opacity when unpinned, full on hover or focus with the
+`--surface` wash the ⋯ uses; the filled pin in `--clay` when pinned, `aria-pressed` carrying the state. It replaces
+the pin mark in the meta line, so the pinned state is shown once. In the sheet, Pin/Unpin is the first choice.
+
 ## CLI updates (1.85)
 
 Pinned Operate extension: variance 2, motion 1, density 5. The existing warm ink palette and

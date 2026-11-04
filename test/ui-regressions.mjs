@@ -787,6 +787,27 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    for(const id of [a,b]){await clickControl(page,`[data-more="${id}"]`);await page.waitForSelector('#so-pin');await clickControl(page,'#so-pin');await page.waitForFunction(id=>!document.querySelector(`.session-item.pinned[data-item="${id}"]`),{},id);}
    await page.waitForFunction(()=>document.querySelectorAll('#open-sessions .open-session.pinned').length===0);
   });
+  await check('Row pin: one click pins and unpins without opening the conversation; Pin is the first option (1.94, Damon)',async()=>{
+   await page.setViewport({width:1440,height:900});
+   const a=rows[4].id,clay='rgb(217, 119, 87)';
+   await openChat(rows[3].id);
+   const pin=()=>page.$eval(`.rail [data-pin-toggle="${a}"]`,e=>({pressed:e.getAttribute('aria-pressed'),label:e.getAttribute('aria-label'),color:getComputedStyle(e).color,w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height}));
+   let p=await pin();assert.equal(p.pressed,'false');assert.match(p.label,/^Pin /);assert.ok(p.h>=44&&p.w>=36,'pin target size '+JSON.stringify(p)+' '+await page.evaluate(()=>location.hash+' '+[...document.querySelectorAll('.rail')].length));
+   await clickControl(page,`.rail [data-pin-toggle="${a}"]`);
+   await page.waitForSelector(`.rail .session-item.pinned[data-item="${a}"]`);
+   p=await pin();assert.equal(p.pressed,'true');assert.match(p.label,/^Unpin /);assert.equal(p.color,clay,'a pinned row shows the pin in the accent');
+   assert.equal(await page.evaluate(()=>chatId),rows[3].id,'the pin does not open the conversation');
+   assert.equal(await page.$(`.rail .session-item[data-item="${a}"] .row .pinmark`),null,'the meta line no longer repeats the pin');
+   await clickControl(page,`.rail [data-more="${a}"]`);await page.waitForSelector('#so-pin');
+   assert.equal(await page.$eval('.sheet .opt',e=>e.id),'so-pin','Unpin is the first option');
+   assert.match(await page.$eval('#so-pin',e=>e.textContent),/^Unpin conversation/);
+   await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.scrim'));
+   await scan('row-pin-desktop');await page.screenshot({path:path.join(out,'row-pin-desktop.png')});
+   await clickControl(page,`.rail [data-pin-toggle="${a}"]`);
+   await page.waitForFunction(id=>!document.querySelector(`.session-item.pinned[data-item="${id}"]`),{},a);
+   assert.equal((await pin()).pressed,'false');
+   assert.equal(await page.evaluate(id=>document.activeElement?.dataset.pinToggle,a),a,'focus stays on the pin after the list repaints');
+  });
   await check('Open-session tabs show each session status like its rail row; nothing when quiet or unconfirmed',async()=>{
    await page.setViewport({width:1440,height:900});
    const a=rows[3].id,b=rows[4].id;
