@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.89.2
+checked: 1.94.0
 sources: docs/install.md, scripts/pocket-init.mjs, access.mjs, public/manifest.webmanifest, public/sw.js, public/workspace.js
 -->
 # Getting started

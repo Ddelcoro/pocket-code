@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.91.0
+checked: 1.94.0
 sources: prompts.mjs, starts.mjs, scripts/pocket-start.mjs, search.mjs, titles.mjs, usage.mjs, models.mjs, claude-catalog.mjs, codex.mjs, session-state.mjs, acp.mjs, openrouter.mjs
 -->
 # Conversations (sessions)
@@ -136,7 +136,8 @@ for a branch, and the state, such as **Response ready**, **Didn't finish**, **Ne
 Open **Conversation options** with the **⋯** on a row, a long-press (phone) or right-click (desktop),
 or the title or **⋯** in an open conversation.
 
-- **Pin conversation** keeps it at the top. Pins keep an order of their own on the server: drag a pinned
+- **Pin conversation** (the first choice) keeps it at the top. Every row also has a pin beside its **⋯**: faint
+  gray on an unpinned conversation, orange on a pinned one; one click pins or unpins it without opening it. Pins keep an order of their own on the server: drag a pinned
   row's grip, focus the grip and press the up and down arrows, or use **Move pin up** and **Move pin
   down**. Unpinning forgets its place.
 - **Rename** sets your title (up to 120 characters) on every device. Save an empty name to go back to

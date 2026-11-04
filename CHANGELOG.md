@@ -3,6 +3,14 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.94.0] — Unreleased · build 187
+
+Requested by Damon (email, 2026-11-04, built at Brad's direction): he pins and unpins conversations often, and Pin sat near the bottom of the ⋯ menu.
+
+- **A pin on every row.** `sessionRowHTML` adds a `.pin-toggle` button (`data-pin-toggle`, `aria-pressed`, "Pin …" / "Unpin …") between the row and the ⋯ button, and before the pinned row's grip. Unpinned it is the outline pin in `--faint` at 55% opacity (full on hover or focus); pinned it is the filled pin in `--clay`. 44px square on touch, 36×44 with a fine pointer. It replaces the small pin mark that sat before the project name in the row's meta line; the tab strip keeps its mark.
+- **Pin first in Conversation options.** **Pin conversation** / **Unpin conversation** is now the first choice, above *Mark as reviewed* and the groups; **Move pin up/down** stay under Organize. The row button and the menu share `togglePin`.
+- Tests: browser, the row pin pins and unpins (state and label) without opening the conversation, and Pin is the first option in the sheet.
+
 ## [1.93.0] — 2026-11-03 · build 186
 
 Requested by Damon (feedback on 2026-11-03, built at Brad's direction): a secret an agent had just stored was hard to find in the Vault, and the approval step was easy to miss. The notification's Allow looked like it worked, and the Vault's own *Allow once* was a quiet chip under a line of names. Brad's call: tapping the notification body opens that request and never approves it; only the notification's Allow does.

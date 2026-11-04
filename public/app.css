@@ -1024,6 +1024,15 @@ header.bar { gap: 2px; padding-inline: 8px; }
 .open-session .tab-failed { background: var(--err); }
 .open-session .tab-finished { background: var(--ok); }
 .open-session :is(.tab-observed,.tab-waiting) { box-sizing: border-box; border: 1.5px solid var(--dim); }
+/* 1.94 (Damon): one-click pin on every row. Faint outline when unpinned, clay when pinned; 44px tall, 36px wide with a fine pointer. */
+.pin-toggle { width: 44px; height: 44px; flex: 0 0 44px; display: flex; align-items: center; justify-content: center; margin: 7px 0 0; border-radius: 10px; color: var(--faint); opacity: .55; }
+.pin-toggle .i { width: 16px; height: 16px; }
+.pin-toggle:hover, .pin-toggle:focus-visible, .pin-toggle[aria-pressed="true"] { opacity: 1; }
+.pin-toggle:hover { color: var(--dim); background: var(--surface); }
+.pin-toggle[aria-pressed="true"] { color: var(--clay); }
+.pin-toggle[aria-pressed="true"] .i { fill: currentColor; }
+.pin-toggle:focus-visible { outline: 2px solid var(--clay); outline-offset: -2px; }
+@media (pointer: fine) { .pin-toggle { width: 36px; flex-basis: 36px; } }
 .pin-grip { display: none; width: 44px; height: 44px; flex: 0 0 44px; align-items: center; justify-content: center; margin: 7px 0 0; border-radius: 10px; color: var(--faint); cursor: grab; touch-action: none; }
 .pin-grip .i { width: 18px; height: 18px; }
 .pin-grip:hover { color: var(--dim); background: var(--surface); }

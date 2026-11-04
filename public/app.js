@@ -373,6 +373,7 @@ function sessionSheet(s, refresh) { // s: {id, title, pinned}
   sh.innerHTML = `
     <h2>Conversation options</h2>
     <p class="sheet-name">${esc(s.title)}</p>
+    <button class="opt" id="so-pin">${IC.pin}<span>${s.pinned ? 'Unpin conversation' : 'Pin conversation'}<span class="sub">${s.pinned ? 'Back to its place by recency' : 'Keep it at the top of the list'}</span></span></button>
     ${s.id!==chatId&&canMarkReviewed(allSessions.find(r=>r.id===s.id)||s)?'<button class="opt" id="so-reviewed">'+IC.tick+'<span>Mark as reviewed<span class="sub">Clear '+(s.state?.kind==='failed'?'the failed reply':'Response ready')+' on all your devices without opening it</span></span></button>':''}
     ${optGroup('This conversation', [
       s.id===chatId?'<button class="opt" id="so-find">'+IC.search+'<span>Find in conversation</span></button><button class="opt" id="so-changes">'+IC.diff+'<span>Changed files</span></button>':'',
@@ -381,7 +382,6 @@ function sessionSheet(s, refresh) { // s: {id, title, pinned}
       `<button class="opt" id="so-agents">${IC.columns}<span>Subagents<span class="sub">What each one is doing, and work in the background</span></span></button>`,
       s.id===chatId?'<button class="opt" id="so-usage">'+IC.gauge+'<span>Plan usage<span class="sub">5-hour and weekly limits, extra-usage status</span></span></button>':''])}
     ${optGroup('Organize', [
-      `<button class="opt" id="so-pin">${IC.pin}<span>${s.pinned ? 'Unpin conversation' : 'Pin conversation'}<span class="sub">${s.pinned ? 'Back to its place by recency' : 'Keep it at the top of the list'}</span></span></button>`,
       s.pinned && pinnedIds().indexOf(s.id) > 0 ? '<button class="opt" id="so-pin-up">'+IC.up+'<span>Move pin up<span class="sub">Earlier among pinned conversations, in the list and the tabs, on every device</span></span></button>' : '',
       s.pinned && pinnedIds().indexOf(s.id) >= 0 && pinnedIds().indexOf(s.id) < pinnedIds().length - 1 ? '<button class="opt" id="so-pin-down">'+IC.down+'<span>Move pin down<span class="sub">Later among pinned conversations, in the list and the tabs, on every device</span></span></button>' : '',
       `<button class="opt" id="so-ren">${IC.pen}<span>Rename<span class="sub">Your title, on every device. Clear it to go back to the automatic one</span></span></button>`,
@@ -394,14 +394,7 @@ function sessionSheet(s, refresh) { // s: {id, title, pinned}
     ${optGroup('Display and version', [chatTextControlsHTML(), s.id===chatId?'<button class="opt" id="so-version">'+IC.info+'<span>Version & updates<span class="sub" id="so-version-sub">'+esc(appVersionLabel())+'</span></span></button>':''])}`;
   const close = () => closeCurrentSheet?.();
   scrim.onclick = close;
-  sh.querySelector('#so-pin').onclick = async () => {
-    close();
-    try {
-      const r = await api(`/session/${s.id}/pin`, { method: 'POST', body: JSON.stringify({ pinned: !s.pinned }) });
-      toast(r.pinned ? 'Pinned to the top' : 'Unpinned');
-      refresh?.(r);
-    } catch (e) { toast('Pin failed: ' + e.message); }
-  };
+  sh.querySelector('#so-pin').onclick = () => { close(); togglePin(s, refresh); };
   sh.querySelector('#so-pin-up')?.addEventListener('click',()=>{close();movePin(s.id,-1);});
   sh.querySelector('#so-pin-down')?.addEventListener('click',()=>{close();movePin(s.id,1);});
   sh.querySelector('#so-hide').onclick=()=>{const row=allSessions.find(r=>r.id===s.id)||s;if(['running','background','observed','waiting','input'].includes(rowState(row).kind))return toast('Active or waiting conversations stay visible.');if(hiddenSessions[s.id])delete hiddenSessions[s.id];else hiddenSessions[s.id]=Math.max(row.mtimeMs||0,row.state?.at||0,Date.now());writeLocal('pc-hidden-sessions',hiddenSessions);close();paintSessionPanels();};
@@ -1576,10 +1569,10 @@ function sessionRowHTML(s) {
   return `<div class="session-item ${s.id === chatId ? 'cur' : ''} ${s.pinned ? 'pinned' : ''}" data-item="${esc(s.id)}">
     <button class="row" data-id="${esc(s.id)}">
       <span class="body"><span class="title">${esc(s.title)}</span>
-      <span class="meta">${s.pinned ? `<span class="pinmark">${IC.pin}</span>` : ''}${s.cwd && s.cwd !== sessionsHome ? esc(projName(s.cwd)) + ' · ' : ''}${s.provider === 'codex' ? 'Codex' : s.provider === 'acp' ? 'OpenRouter' : 'Claude'}${s.branchOf ? ' · Branch' : ''}</span>
+      <span class="meta">${s.cwd && s.cwd !== sessionsHome ? esc(projName(s.cwd)) + ' · ' : ''}${s.provider === 'codex' ? 'Codex' : s.provider === 'acp' ? 'OpenRouter' : 'Claude'}${s.branchOf ? ' · Branch' : ''}</span>
       <span class="session-status state-${sessionsStale ? 'unknown' : state.kind}">${running && !sessionsStale ? '<span class="ember" aria-hidden="true"></span>' : background && !sessionsStale ? '<span class="ember dim" aria-hidden="true"></span>' : ''}${sessionsStale ? 'Status unavailable' : esc(state.label)}${isUnread(s) ? '<span class="unread">New</span>' : ''}${running && state.queued ? ` · ${state.queued} queued` : ''}</span>
       <span class="activity-detail">${esc(detail)}${running?' · <span data-run-age></span>':''}</span></span>
-    </button>${s.pinned ? `<button class="pin-grip" type="button" data-grip="${esc(s.id)}" aria-label="Reorder pinned conversation ${esc(s.title)}: drag it, or press the up and down arrow keys">${IC.grip}</button>` : ''}<button class="session-more icon" data-more="${esc(s.id)}" aria-label="Options for ${esc(s.title)}">${IC.more}</button>
+    </button><button class="pin-toggle" type="button" data-pin-toggle="${esc(s.id)}" aria-pressed="${s.pinned ? 'true' : 'false'}" aria-label="${s.pinned ? 'Unpin' : 'Pin'} ${esc(s.title)}" title="${s.pinned ? 'Unpin' : 'Pin to the top'}">${IC.pin}</button>${s.pinned ? `<button class="pin-grip" type="button" data-grip="${esc(s.id)}" aria-label="Reorder pinned conversation ${esc(s.title)}: drag it, or press the up and down arrow keys">${IC.grip}</button>` : ''}<button class="session-more icon" data-more="${esc(s.id)}" aria-label="Options for ${esc(s.title)}">${IC.more}</button>
   </div>`;
 }
 /* ---------- pinned order: drag a pin's grip, press its arrow keys, or use Move up/down in Session options.
@@ -1638,6 +1631,14 @@ function bindPinDrag(container) {
     };
   });
 }
+// 1.94 (Damon): the row's pin button and Conversation options share one toggle.
+async function togglePin(s, refresh) {
+  try {
+    const r = await api(`/session/${s.id}/pin`, { method: 'POST', body: JSON.stringify({ pinned: !s.pinned }) });
+    toast(r.pinned ? 'Pinned to the top' : 'Unpinned');
+    refresh?.(r);
+  } catch (e) { toast('Pin failed: ' + e.message); }
+}
 function bindSessionRows(container) {
   bindPinDrag(container);
   container.querySelector('[data-automated]')?.addEventListener('toggle', e => writeLocal('pc-automated-open', e.target.open));
@@ -1645,6 +1646,10 @@ function bindSessionRows(container) {
     row.onclick = () => { closeCurrentSheet?.(); location.hash = '#/chat/' + row.dataset.id; };
     const session = allSessions.find(s => s.id === row.dataset.id);
     wireRowMenu(row, () => session, refreshSessions);
+  });
+  container.querySelectorAll('[data-pin-toggle]').forEach(b => b.onclick = () => {
+    const session = allSessions.find(s => s.id === b.dataset.pinToggle);
+    if (session) togglePin(session, refreshSessions);
   });
   container.querySelectorAll('[data-more]').forEach(b => b.onclick = () => {
     const session = allSessions.find(s => s.id === b.dataset.more);
@@ -1743,10 +1748,10 @@ function paintSessionPanels() {
   document.querySelectorAll('[data-session-results]').forEach(el => {
     if (pinDragging) return;                                   // a background refresh must not pull the row out from under the pointer
     const focus = el.contains(document.activeElement) ? document.activeElement?.dataset : null;
-    const id = focus?.id, more = focus?.more, grip = focus?.grip;
+    const id = focus?.id, more = focus?.more, grip = focus?.grip, pin = focus?.pinToggle;
     const list = filteredSessions();
     el.innerHTML = reviewBarHTML(list) + groupedSessionsHTML(list); bindSessionRows(el);
-    if (id || more || grip) el.querySelector(`[${grip ? 'data-grip' : more ? 'data-more' : 'data-id'}="${CSS.escape(grip || more || id)}"]`)?.focus({preventScroll:true});
+    if (id || more || grip || pin) el.querySelector(`[${grip ? 'data-grip' : pin ? 'data-pin-toggle' : more ? 'data-more' : 'data-id'}="${CSS.escape(grip || pin || more || id)}"]`)?.focus({preventScroll:true});
   });
   document.querySelectorAll('[data-session-warning]').forEach(el => { el.textContent = sessionWarnings.join(' '); el.hidden = !sessionWarnings.length; });
   const current = allSessions.find(s => s.id === chatId);
