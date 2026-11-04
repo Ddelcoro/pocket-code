@@ -3,7 +3,7 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
-## [1.94.0] — Unreleased · build 187
+## [1.94.0] — 2026-11-04 · build 187
 
 Requested by Damon (email, 2026-11-04, built at Brad's direction): he pins and unpins conversations often, and Pin sat near the bottom of the ⋯ menu.
 
