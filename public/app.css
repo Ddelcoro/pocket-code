@@ -1923,8 +1923,9 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 .inbox-rest { margin-top: 10px; color: var(--dim); font-size: 13.5px; }
 .watch-labels { margin: 6px 14px 0; } /* 1.95: the scope's label chips */
 .watch-labels[hidden] { display: none; }
-.watch-label-chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: none; grid-template-columns: none; }
-.watch-label-chips .chip { padding: 4px 10px; font-weight: 500; }
+.watch-label-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
+.watch-label-chips .chip { flex: none; min-height: 36px; padding: 6px 14px; font-weight: 500; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.watch-label-chips .chip[aria-pressed="true"] { color: var(--clay); border-color: var(--clay); background: var(--clay-deep); }
 .watch-label-add { margin-top: 8px; }
 .watch-label-add .watch-name { flex: 1; }
 .inbox-item-listed { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; } /* 1.95: a line already on the list links to its entry */
