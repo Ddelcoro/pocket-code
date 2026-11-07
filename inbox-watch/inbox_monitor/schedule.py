@@ -12,7 +12,8 @@ The shape (JSON in Pocket, the same keys in the TOML as snake_case where noted):
                 TOML; from/to are "HH:MM" local; to <= from runs past midnight (and belongs to the day it started).
                 The first period that covers the moment wins.
   quietHours    [start hour, end hour): ordinary alerts wait until the end (TOML quiet_hours)
-  digestHour    the morning digest and the release of held alerts (TOML digest_hour)
+  digestHour    the morning digest and the release of held alerts (TOML digest_hour); null: no digest, and held alerts go out
+                on their own when quiet hours end
   lookahead     {morning: hour | null, evening: hour | null}: each look-ahead may run from that hour for 4 hours
                 (TOML lookahead = { morning = [8, 12], evening = [17, 22] } keeps its own window)
   models        {decisions: {model, reasoning}, lookahead: {model, reasoning}}; reasoning "default" leaves the model's own
@@ -122,7 +123,8 @@ def normalize(raw: dict | None, base: dict, models: list[str] | None = None) -> 
         a, b = _hour(q[0], None), _hour(q[1], None)
         if a is not None and b is not None:
             out["quietHours"] = [a, b]
-    out["digestHour"] = _hour(raw.get("digestHour", raw.get("digest_hour", out["digestHour"])), out["digestHour"]) or 0
+    digest = raw.get("digestHour", raw.get("digest_hour", out["digestHour"]))
+    out["digestHour"] = None if digest is None else _hour(digest, out["digestHour"])  # None: off
     la = raw.get("lookahead")
     if isinstance(la, dict):
         for slot in ("morning", "evening"):

@@ -42,6 +42,8 @@ def test_normalize_keeps_good_fields_and_drops_bad_ones():
     assert s["every"] == 5  # out of range: the default
     assert s["periods"] == [{"name": "", "days": [0], "from": "00:00", "to": "06:30", "every": 15}]  # no days: dropped; bad time: 00:00
     assert s["quietHours"] == [21, 7] and s["digestHour"] == 8
+    assert S.normalize({"digestHour": None}, BASE)["digestHour"] is None, "null is Off, and stays Off"
+    assert S.normalize({"digestHour": 6}, BASE)["digestHour"] == 6 and S.normalize({"digestHour": 0}, BASE)["digestHour"] == 0
     assert s["lookahead"] == {"morning": None, "evening": 18}
     assert s["models"]["decisions"] == {"model": "sonnet", "reasoning": "medium"}  # unknown model and level: the defaults
     assert s["models"]["lookahead"] == {"model": "fable", "reasoning": "default"}

@@ -57,7 +57,8 @@ ROOT = STATE = DB_PATH = ARCHIVE_PATH = LOCK_PATH = LOG_PATH = STOP_FILE = PROMP
 MAILBOX = OWNER = ASSISTANT = ""
 TZ = ZoneInfo("UTC")
 QUIET_START_H, QUIET_END_H = 22, 8
-DIGEST_HOUR = 8
+DIGEST_HOUR = 8  # None: the digest is off
+DIGEST_CARDS = 200  # Pocket's LIMITS.items
 CHECKIN_SLOTS: dict[str, tuple[int, int]] = {}
 JUDGE = None
 LOOKAHEAD_JUDGE = None  # optional second judge for the twice-daily look-ahead ([judge.lookahead] in the config)
@@ -1373,8 +1374,9 @@ def briefing_for(store: Store, alert: sqlite3.Row, thread: dict | None) -> str:
     return "\n".join(lines)
 
 
-def deliver(store: Store, alert_id: int, thread: dict | None, dry_run: bool, held_note: bool = False) -> bool:
-    """One alert to every configured delivery; the Pocket start link (when configured) is made once and shared."""
+def deliver(store: Store, alert_id: int, thread: dict | None, dry_run: bool, held_note: bool = False, items: list[dict] | None = None) -> bool:
+    """One alert to every configured delivery; the Pocket start link (when configured) is made once and shared.
+    `items` (1.95): a look-ahead's cards, for a channel that can offer a choice per item."""
     alert = store.db.execute("select * from alerts where id=?", (alert_id,)).fetchone()
     a = dict(alert)
     title = f"Email: {a['subject']}" if a["kind"] != "checkin" else (a["subject"] or "Look-ahead")
@@ -1391,7 +1393,7 @@ def deliver(store: Store, alert_id: int, thread: dict | None, dry_run: bool, hel
     refs = []
     for d in DELIVERIES:
         try:
-            ref = d.send_lookahead(a, pocket_url=pocket) if a["kind"] == "checkin" else d.send_alert(a, pocket_url=pocket, held_note=held_note)
+            ref = d.send_lookahead(a, pocket_url=pocket, items=items) if a["kind"] == "checkin" else d.send_alert(a, pocket_url=pocket, held_note=held_note)
             refs.append(f"{d.kind}:{ref}")
         except Exception as e:  # noqa: BLE001
             log(f"deliver {d.kind} failed for alert {alert_id}: {e}")
@@ -1435,19 +1437,74 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
 
     resolved = [a for a in overflow if is_resolved(a)]
     still = [a for a in overflow if not is_resolved(a)]
+    first = lambda t: (t or "").strip().splitlines()[0] if (t or "").strip() else ""  # noqa: E731
+
+    links = True
+
+    def item(a, section: str, text: str) -> dict:
+        """1.95: the line as data for Pocket, where each gets its own choices; `ref` a<alert id> is what its feedback names. A line
+        still open (held, worth knowing) also gets a briefed start link, like an alert's, so the owner can talk about that one
+        thing now without teaching the watcher anything."""
+        nonlocal links
+        url = None
+        if links and section in ("held", "worth") and not dry_run and not MODE.replay and CFG.pocket.get("root"):
+            url = start_link(CFG.pocket, briefing_for(store, a, None), f"Email: {a['subject']}", log)
+            links = bool(url)  # Pocket did not answer: the other cards go without rather than each waiting out its own timeout
+        return {"ref": f"a{a['id']}", "section": section, "title": a["subject"] or first(text)[:120] or "(no subject)", "text": text, "story": a["issue_key"] or "",
+                "gmail": GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else "", "priority": a["priority"] or "normal", "url": url or ""}
+    # 1.95 (Brad): a story that already has an open entry on the owner's list never comes back as a new card. Such lines go
+    # under "Already on your list", each linking to its entry; Pocket applies the same rule itself when it stores the digest.
+    listed: dict[int, str] = {}
+    box = pocket_inbox()
+    if box is not None and not MODE.replay:
+        try:
+            open_entries = [e for e in box.inbox_open() if e.get("kind") == "alert"]
+        except Exception as ex:  # noqa: BLE001
+            log(f"digest: could not read the open entries ({ex}); every line is a card")
+            open_entries = []
+        for a in still + digest_items:
+            gmail = GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else None
+            hit = next((e for e in open_entries if (a["issue_key"] and e.get("story") == a["issue_key"]) or (gmail and e.get("gmail") == gmail)), None)
+            if hit and hit.get("id"):
+                listed[a["id"]] = f"/#/inbox/{hit['id']}"
+    still, on_list = [a for a in still if a["id"] not in listed], [a for a in still + digest_items if a["id"] in listed]
+    digest_items = [a for a in digest_items if a["id"] not in listed]
     lines: list[str] = []
+    rows: list[tuple] = []  # (alert, section, text): the digest's lines, before they become cards
     if still:
-        lines += [f"## Also held overnight ({len(still)})"] + [f"- {a['subject'] or ''}: {(a['text'] or '').splitlines()[0]}" for a in still]
+        lines += [f"## Also held overnight ({len(still)})"] + [f"- {a['subject'] or ''}: {first(a['text'])}" for a in still]
+        rows += [(a, "held", first(a["text"])) for a in still]
     if resolved:
-        lines += [f"## Came up overnight and already resolved ({len(resolved)})"] + [f"- {a['subject'] or ''}: {(a['text'] or '').splitlines()[0]}" for a in resolved]
+        lines += [f"## Came up overnight and already resolved ({len(resolved)})"] + [f"- {a['subject'] or ''}: {first(a['text'])}" for a in resolved]
+        rows += [(a, "resolved", first(a["text"])) for a in resolved]
     if digest_items:
         lines += ["## Worth knowing"] + [f"- {a['subject'] or ''}: {a['text'] or ''}" for a in digest_items]
-    tidied = store.db.execute("select title, verdict from tidy_log where acted=1 and at>=? order by id", (since,)).fetchall()
+        rows += [(a, "worth", a["text"] or "") for a in digest_items]
+    if on_list:
+        lines += [f"## Already on your list ({len(on_list)})"] + [f"- {a['subject'] or ''}: {first(a['text'])}" for a in on_list]
+        rows += [(a, "listed", first(a["text"])) for a in on_list]
+    # One card per story: lines on the same story or thread are one thing to decide. The card is the newest line, with the other
+    # lines' text under it, and sits where the story first appears. The digest's text keeps every line.
+    stories: dict[str, list[tuple]] = {}
+    for r in rows:
+        stories.setdefault(r[0]["issue_key"] or r[0]["thread_id"] or f"a{r[0]['id']}", []).append(r)
+    items: list[dict] = []
+    for group in stories.values():
+        a = max((r[0] for r in group), key=lambda x: x["id"])
+        card = item(a, group[0][1], "\n\n".join(dict.fromkeys(r[2] for r in reversed(group) if r[2])))
+        items.append(dict(card, url=listed[a["id"]]) if card["section"] == "listed" else card)
+    tidied = store.db.execute("select id, title, verdict, issue_key from tidy_log where acted=1 and at>=? order by id", (since,)).fetchall()
     if tidied:
         res = [t["title"] for t in tidied if t["verdict"] == "resolved"]
         han = [t["title"] for t in tidied if t["verdict"] == "handled"]
         lines += [f"## Taken off your Inbox ({len(tidied)})"] + ([f"- Resolved: {', '.join(res)}"] if res else []) + ([f"- Handled, still followed: {', '.join(han)}"] if han else [])
+        items += [{"ref": f"t{t['id']}", "section": "tidied", "title": t["title"] or "(no title)", "text": "Resolved" if t["verdict"] == "resolved" else "Handled, still followed",
+                   "story": t["issue_key"] or "", "gmail": "", "priority": "normal", "url": ""} for t in tidied]
     lines += [f"Ignored since the last digest: {ignored} threads. Reply if something should have reached you."]
+    if len(items) > DIGEST_CARDS:  # first, so Pocket's cut of a long text never takes it
+        extra = len(items) - DIGEST_CARDS
+        lines.insert(0, f"{extra} more {'line' if extra == 1 else 'lines'} did not fit as cards. The full digest in Files has every line.")
+        items = items[:DIGEST_CARDS]
     text = "\n".join(lines)
     if overflow or digest_items or ignored:
         ref = None
@@ -1460,7 +1517,7 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
             refs = []
             for d in DELIVERIES:
                 try:
-                    refs.append(f"{d.kind}:{d.send_digest(title, text)}")
+                    refs.append(f"{d.kind}:{d.send_digest(title, text, items=items)}")
                 except Exception as ex:  # noqa: BLE001
                     log(f"digest {d.kind} failed: {ex}")
             if DELIVERIES and not refs:
@@ -1468,10 +1525,61 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
                 return
             ref = ",".join(refs) or None
             store.set("digest_memory_pending", json.dumps({"title": title, "text": text, "date": today}))
-        for a in still + digest_items:
+        for a in still + digest_items + on_list:
             store.mark_sent(a["id"], ref, None, "dry-run" if dry_run else "digested")
     store.set("last_digest_date", today)
     store.set("last_digest_at", iso())
+
+
+def skip_digest(store: Store) -> None:
+    """The morning digest is off. The held alerts have already gone out on their own (release_held). Worth-knowing lines reach no
+    one, so they close here instead of piling up for the day the digest comes back on."""
+    today = now_et().date().isoformat()
+    rows = store.pending(("digest",), ("queued",))
+    for a in rows:
+        store.mark_sent(a["id"], None, None, "skipped")
+    if rows:
+        log(f"morning digest is off: {len(rows)} worth-knowing lines not sent")
+    store.set("last_digest_date", today)
+    store.set("last_digest_at", iso())
+
+
+def lookahead_cards(store: Store, archive: Archive, alert_id: int, text: str, stories: list[dict], until: int, links: bool) -> list[dict]:
+    """1.95 (Brad): a look-ahead as cards, one per bullet of its message, so nothing it says is lost. Each bullet is matched to the
+    story that names it (`bullet`), else to the story whose evidence it cites most, else it stays a card with no story. A bullet
+    covering two stories is one card on the first. ref "c<alert id>.<bullet>": apply_item_feedback knows it by that shape."""
+    bullets = [m.group(1).strip() for m in (re.match(r"[ \t]*[-*][ \t]+(.+)", l) for l in (text or "").split("\n")) if m]
+    named: dict[int, dict] = {}
+    for s in stories:
+        n = str(s.get("bullet") or "")
+        if n.isdigit() and 1 <= int(n) <= len(bullets):
+            named.setdefault(int(n), s)
+    used = {id(s) for s in named.values()}
+    cards = []
+    for n, b in enumerate(bullets, 1):
+        cited = re.findall(r"\(msg:([0-9a-f]{6,24})\)", b)
+        s = named.get(n)
+        if s is None:
+            def overlap(x: dict) -> int:
+                return len({e["message_id"] for e in x.get("evidence") or []} & set(cited))
+            s = max((x for x in stories if id(x) not in used and overlap(x)), key=overlap, default=None)
+            if s is not None:
+                used.add(id(s))
+        thread = (s or {}).get("thread")
+        if not thread and cited:
+            r = archive.get(cited[:1], until)
+            thread = r[0]["thread_id"] if r else None
+        plain = re.sub(r"\s+", " ", CITE_RX.sub(r"\1", b)).strip()
+        title = (s or {}).get("title") or clip(re.split(r"(?<=[.!?:])\s", plain, maxsplit=1)[0], 120) or "Look-ahead item"
+        key = (s or {}).get("issue_key") or ""
+        url = None
+        if links:
+            url = start_link(CFG.pocket, briefing_for(store, {"subject": title, "sender": f"{ASSISTANT} (look-ahead)", "thread_id": thread, "text": b, "next_step": None, "issue_key": key}, None),
+                             f"Look-ahead: {title}", log)
+            links = bool(url)  # Pocket did not answer: the other cards go without
+        cards.append({"ref": f"c{alert_id}.{n}", "section": "ahead", "title": title, "text": b, "story": key, "gmail": GMAIL_THREAD_URL.format(thread_id=thread) if thread else "",
+                      "priority": (s or {}).get("priority") or "normal", "url": url or ""})
+    return cards
 
 
 def checkin(store: Store, archive: Archive, gmail: Gmail, slot: str, dry_run: bool) -> None:
@@ -1513,6 +1621,7 @@ def checkin(store: Store, archive: Archive, gmail: Gmail, slot: str, dry_run: bo
         if it["evidence"]:
             r = archive.get([it["evidence"][0]["message_id"]], until)
             thread = r[0]["thread_id"] if r else None
+        it["thread"] = thread
         store.upsert_story(it, thread)
         store.add_event(it["issue_key"], "checkin", it["new_fact"], [e["message_id"] for e in it["evidence"]])
     text = sanitize_citations(data.get("message"), valid)
@@ -1522,7 +1631,13 @@ def checkin(store: Store, archive: Archive, gmail: Gmail, slot: str, dry_run: bo
         aid = store.queue_alert(f"checkin|{now_et().date()}|{slot}", issue_key=None, thread_id="", kind="checkin", priority="high", text=text,
                                 next_step=None, subject=f"Look-ahead · {now_et().strftime('%a %-I %p')}", sender=f"{ASSISTANT} ({keys})", status="queued")
         if aid:
-            deliver(store, aid, None, dry_run)
+            try:  # the cards are extra: without them the look-ahead still goes out as its text
+                cards = lookahead_cards(store, archive, aid, text, items, until,
+                                        not dry_run and not MODE.replay and bool(CFG.pocket.get("root")))
+            except Exception as ex:  # noqa: BLE001
+                log(f"look-ahead cards failed: {ex}")
+                cards = None
+            deliver(store, aid, None, dry_run, items=cards)
 
 
 def scheduled(store: Store, archive: Archive, gmail: Gmail, dry_run: bool) -> None:
@@ -1530,8 +1645,8 @@ def scheduled(store: Store, archive: Archive, gmail: Gmail, dry_run: bool) -> No
     today = t.date().isoformat()
     if in_quiet_hours():
         return
-    morning_due = store.get("last_digest_date") != today and t.hour >= DIGEST_HOUR
-    overflow = release_held(store, dry_run) if morning_due else []
+    morning_due = store.get("last_digest_date") != today and t.hour >= (DIGEST_HOUR or 0)  # digest off (None): the release still runs, at the end of quiet hours
+    overflow = release_held(store, dry_run, everything=DIGEST_HOUR is None) if morning_due else []
     for slot, (h0, h1) in CHECKIN_SLOTS.items():
         key = f"checkin_{today}_{slot}"
         tries = int(store.get(key + "_tries", "0"))
@@ -1545,7 +1660,10 @@ def scheduled(store: Store, archive: Archive, gmail: Gmail, dry_run: bool) -> No
                 log(f"checkin {slot} failed: {e}")
             store.commit()
     if morning_due:
-        send_digest(store, overflow, dry_run)
+        if DIGEST_HOUR is None:
+            skip_digest(store)
+        else:
+            send_digest(store, overflow, dry_run)
         if not MODE.replay:
             archive.prune()
 
@@ -2056,9 +2174,77 @@ def _process_batch(store: Store, archive: Archive, gmail: Gmail, run_id: int, ba
 FEEDBACK_ACTIONS = {"resolved": "resolve", "dismissed": "dismiss", "not useful": "not_useful"}
 
 
-def apply_feedback(store: Store) -> None:
+def digest_item_alert(store: Store, ref: str) -> sqlite3.Row | None:
+    """The alert row behind a digest item's ref ("a<id>", send_digest's item()); a tidy line ("t<id>") has none."""
+    m = re.fullmatch(r"a(\d+)", ref or "")
+    return store.db.execute("select * from alerts where id=?", (int(m.group(1)),)).fetchone() if m else None
+
+
+def lookahead_item_alert(ref: str, it: dict) -> dict | None:
+    """What a look-ahead card ("c<alert id>.<bullet>", lookahead_cards) would alert with. It has no alert row of its own, so this
+    is built from what Pocket reports back. None for any other ref."""
+    if not re.fullmatch(r"c\d+\.\d+", ref or ""):
+        return None
+    m = re.search(r"#all/([0-9A-Za-z]+)$", it.get("gmail") or "")
+    return {"id": ref, "issue_key": it.get("story") or None, "thread_id": m.group(1) if m else "", "text": it.get("text") or it.get("title") or "", "next_step": None,
+            "subject": it.get("title") or "Look-ahead item", "sender": f"{ASSISTANT} (look-ahead)", "priority": it.get("priority") or "normal"}
+
+
+def apply_item_feedback(store: Store, it: dict, dry_run: bool) -> bool:
+    """1.95: a decision on one card of the morning digest or a look-ahead in Pocket (feedback kind 'digest-item'). Add to Inbox sends
+    that story as an alert of its own now (the owner is up and asking, so quiet hours do not hold it) and lifts a low story to
+    normal; from the digest it is also a lesson the next learn turn turns into a rule, since the watcher underrated that mail. A
+    look-ahead item is a finding, not a kind of mail, so it teaches nothing. Resolved closes the story; Not useful is the lesson an
+    alert's Not useful is; Restore reopens a story Resolved had closed. False: Add to Inbox could not reach the owner, so nothing is
+    recorded and Pocket keeps the request for the next run."""
+    ref, action = str(it.get("item") or ""), FEEDBACK_ACTIONS.get(it.get("action"), it.get("action"))
+    ahead = lookahead_item_alert(ref, it)
+    a = ahead or digest_item_alert(store, ref)
+    where, line = ("a look-ahead", "look-ahead item") if ahead else ("the morning digest", "digest line")
+    key = (a["issue_key"] if a and a["issue_key"] else "") or (it.get("story") or "")
+    title = ((it.get("title") or "") or (a["subject"] if a else "") or "")[:120]
+    when = iso_to_et(it.get("at")) or now_et().strftime("%a %b %-d")
+    note = (it.get("note") or "")[:300]
+    story = store.story(key) if key else None
+    if action == "alert":
+        if not a:
+            log(f"feedback alert on digest item {ref!r}: no alert behind it; nothing to send")
+            return True
+        dedupe = f"escalate:{a['id']}:{it.get('at') or iso()}"
+        store.queue_alert(dedupe, issue_key=a["issue_key"], thread_id=a["thread_id"], kind="notify",
+                                   priority=a["priority"] if a["priority"] in ("high", "critical") else "normal", text=a["text"], next_step=a["next_step"],
+                                   subject=a["subject"], sender=a["sender"], status="queued")
+        row = store.db.execute("select id, status from alerts where dedupe_key=?", (dedupe,)).fetchone()  # this run's, or the one a failed run left
+        if row and row["status"] not in ("sent", "dry-run") and not deliver(store, row["id"], None, dry_run):
+            log(f"feedback alert on digest item {ref!r}: delivery failed; trying again next run")
+            return False
+        if story:
+            if story["priority"] == "low":
+                store.db.execute("update issues set priority='normal', updated_at=? where issue_key=?", (iso(), key))
+            store.add_event(key, "feedback", f"{OWNER} added this to the Inbox from {where} in Pocket ({when}).", [])
+        if not ahead:
+            add_lesson(store, f"escalated:{it['id']}", "escalated", a["thread_id"], key or None, title, a["sender"] or "", a["subject"] or title,
+                       "", f"digest line: {clip(a['text'], 400)}", note)
+    elif action == "resolve" and story:
+        store.db.execute("update issues set status='resolved', updated_at=? where issue_key=?", (iso(), key))
+        store.add_event(key, "feedback", f"{OWNER} marked this resolved from {where} in Pocket ({when}).", [])
+    elif action == "not_useful":
+        add_lesson(store, f"not_useful:{it['id']}", "not_useful", a["thread_id"] if a else None, key or None, title, a["sender"] if a else "",
+                   a["subject"] if a else title, "", f"{line}: {clip(a['text'], 400)}" if a else line, note)
+        if story:
+            store.db.execute("update issues set priority='low', updated_at=? where issue_key=?", (iso(), key))
+            store.add_event(key, "feedback", f"{OWNER} marked a {line} on this story not useful in Pocket ({when}).", [])
+    elif action == "restore" and story and story["status"] == "resolved":
+        store.db.execute("update issues set status='open', updated_at=? where issue_key=?", (iso(), key))
+        store.add_event(key, "feedback", f"{OWNER} restored this in Pocket ({when}).", [])
+    log(f"feedback {action} on {line} {ref!r}: {title!r} story={key or '-'}")
+    return True
+
+
+def apply_feedback(store: Store, dry_run: bool = False) -> None:
     """What the owner did with earlier alerts in Pocket (1.69 Inbox): Resolved closes the story, Not useful becomes a line
-    in the preferences file the judge reads every turn and drops the story to low, Restore reopens; Dismiss changes nothing."""
+    in the preferences file the judge reads every turn and drops the story to low, Restore reopens; Dismiss changes nothing.
+    1.95: a decision on one digest item (kind 'digest-item') goes to apply_item_feedback."""
     for d in DELIVERIES:
         if not hasattr(d, "feedback"):
             continue
@@ -2072,6 +2258,13 @@ def apply_feedback(store: Store) -> None:
         for it in items:
             if it.get("id") in own:  # the tidy pass made this decision and already applied it to the story
                 done.append(it["id"])
+                continue
+            if it.get("kind") == "digest-item":
+                try:
+                    if apply_item_feedback(store, it, dry_run):
+                        done.append(it["id"])
+                except Exception as ex:  # noqa: BLE001
+                    log(f"feedback on digest item {it.get('id')!r} failed: {ex}")  # not acked: the decision stays for the next run
                 continue
             key, title = it.get("story") or "", (it.get("title") or "")[:120]
             # Pocket reports the entry's state ("resolved", "not_useful", "dismissed") or "restore", not the verb the owner
@@ -2462,7 +2655,7 @@ def learn(store: Store, dry_run: bool = False) -> int:
     while rules and sum(len(r) + 3 for r in rules) > room:
         rules.pop()
     changes = [clip(str(c), 200) for c in (data.get("changes") or []) if isinstance(c, str)]
-    section = (f"{LEARNED_HEADER.format(owner=OWNER)}\nWritten by the watcher from what {OWNER} labelled in Gmail and marked Not useful "
+    section = (f"{LEARNED_HEADER.format(owner=OWNER)}\nWritten by the watcher from what {OWNER} labelled in Gmail, asked to be alerted on from a digest, and marked Not useful "
                f"in Pocket. Edit or delete any line.\n" + "".join(f"- {r}\n" for r in rules))
     text = owner_rules.rstrip() + "\n\n" + section
     if dry_run:
@@ -2490,7 +2683,7 @@ def scheduled_due(store: Store) -> bool:
     if in_quiet_hours():
         return False
     today = t.date().isoformat()
-    if store.get("last_digest_date") != today and t.hour >= DIGEST_HOUR:
+    if store.get("last_digest_date") != today and t.hour >= (DIGEST_HOUR or 0):
         return True
     return any(h0 <= t.hour < h1 and not store.get(f"checkin_{today}_{slot}") and int(store.get(f"checkin_{today}_{slot}_tries", "0")) < 3
                for slot, (h0, h1) in CHECKIN_SLOTS.items())
@@ -2658,7 +2851,7 @@ def run(dry_run: bool, baseline_only: bool, why: str = "", request: str | None =
     changed_n = evaluated = notified = 0
     error = None
     try:
-        apply_feedback(store)
+        apply_feedback(store, dry_run)
         learn_safely(store, dry_run)
         cursor = store.get("history_cursor")
         if cursor and not gmail.cursor_ok(cursor):
@@ -2887,7 +3080,7 @@ def _main(argv: list[str] | None = None) -> int:
         print(f"from {SETTINGS_FROM}{' revision ' + str(SETTINGS_REVISION) if SETTINGS_REVISION is not None else ''}: {schedmod.describe(SETTINGS)}")
         print(f"now: {'paused' if SETTINGS['paused'] else ('no checks' if every == 0 else f'every {every} min')}{' (' + period + ')' if period else ''}; "
               f"last check {last.strftime('%a %-I:%M %p') if last else 'never'}; next {nxt.strftime('%a %-I:%M %p') if nxt else 'none scheduled'}")
-        print(f"quiet hours {SETTINGS['quietHours'][0]}:00–{SETTINGS['quietHours'][1]}:00; digest {DIGEST_HOUR}:00; look-ahead "
+        print(f"quiet hours {SETTINGS['quietHours'][0]}:00–{SETTINGS['quietHours'][1]}:00; digest {'off' if DIGEST_HOUR is None else str(DIGEST_HOUR) + ':00'}; look-ahead "
               + (", ".join(f"{k} {a}:00–{b}:00" for k, (a, b) in CHECKIN_SLOTS.items()) or "off"))
         print(f"decisions: {JUDGE.describe()}\nlook-ahead: {LOOKAHEAD_JUDGE.describe()}")
         td = SETTINGS.get("tidy") or {}

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-export const LIMITS = { text: 20000, title: 160, entries: 500, ttlDaysDefault: 7, ttlDaysMax: 30 };
+export const LIMITS = { text: 20000, title: 160, entries: 1600, ttlDaysDefault: 7, ttlDaysMax: 30 };
 const PROVIDERS = ['claude', 'codex'];
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const str = (v, max) => typeof v === 'string' ? v.trim().slice(0, max) : '';

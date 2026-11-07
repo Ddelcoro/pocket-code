@@ -28,6 +28,7 @@ Return ONLY a JSON object:
       "title": "<short story name>",
       "status": "open | awaiting_other | resolved | uncertain",
       "priority": "critical | high | normal | low",
+      "bullet": "<the number of the `- ` bullet in `message` about this story, 1 for the first; null when the message does not mention it>",
       "owner": "<who owes the next step, or null>",
       "deadline": "<ISO 8601 with offset, or null>",
       "new_fact": "<one sentence: what you concluded>",

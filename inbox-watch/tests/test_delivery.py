@@ -63,6 +63,56 @@ def test_inbox_entry_keeps_the_pocket_path():
     assert calls[-1][calls[-1].index("--url") + 1] == PATH_LINK, calls[-1]
 
 
+def test_a_refused_card_does_not_cost_the_digest():
+    p = D.PocketPush({"root": tempfile.mkdtemp()}, lambda *a: None)
+    p.inbox = True
+    p._keep = lambda *a: "doc1"
+    calls = []
+
+    def node(script, args, stdin=None):
+        calls.append(args)
+        bad = "--items" in args
+        return type("R", (), {"returncode": 1 if bad else 0, "stdout": "" if bad else '{"entry": {"id": "e1"}}', "stderr": "Item 3: a title is required" if bad else ""})()
+    p._node = node
+    assert p.send_digest("Digest", "text", items=[{"ref": "a1"}]).startswith("inbox=e1")
+    assert len(calls) == 2 and "--items" not in calls[1], calls
+
+
+def test_a_look_ahead_carries_its_cards_and_a_refused_card_does_not_cost_it():
+    p = D.PocketPush({"root": tempfile.mkdtemp()}, lambda *a: None)
+    p.inbox = True
+    p._keep = lambda *a: "doc1"
+    calls = []
+    refuse = [True]
+
+    def node(script, args, stdin=None):
+        calls.append(args)
+        bad = refuse[0] and "--items" in args
+        return type("R", (), {"returncode": 1 if bad else 0, "stdout": "" if bad else '{"entry": {"id": "e1"}}', "stderr": "Item 3: a title is required" if bad else ""})()
+    p._node = node
+    alert = {**ALERT, "subject": "Look-ahead", "dedupe_key": "checkin|x"}
+    assert p.send_lookahead(alert, pocket_url=None, items=[{"ref": "c1.1"}]).startswith("inbox=e1")
+    assert len(calls) == 2 and "--items" in calls[0] and "--items" not in calls[1], calls
+    refuse[0] = False
+    calls.clear()
+    p.send_lookahead(alert, pocket_url=None, items=[{"ref": "c1.1"}])
+    assert len(calls) == 1 and "--items" in calls[0], calls
+
+
+def test_a_pocket_outage_is_not_mistaken_for_a_refused_card():
+    p = D.PocketPush({"root": tempfile.mkdtemp()}, lambda *a: None)
+    p.inbox = True
+    p._keep = lambda *a: "doc1"
+    calls = []
+    p._node = lambda script, args, stdin=None: calls.append(args) or type("R", (), {"returncode": 1, "stdout": "", "stderr": "Pocket is not answering"})()
+    try:
+        p.send_digest("Digest", "text", items=[{"ref": "a1"}])
+        raise AssertionError("the failure goes up, so the digest is retried with its cards")
+    except RuntimeError as ex:
+        assert "not answering" in str(ex)
+    assert len(calls) == 1, calls
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     for n, f in tests:

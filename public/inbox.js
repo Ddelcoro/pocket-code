@@ -51,9 +51,48 @@ const inboxKindWord=e=>e.kind==='digest'?'digest':e.kind==='lookahead'?'look-ahe
 const inboxStateWord=e=>({resolved:'Resolved',not_useful:'Not useful',dismissed:'Dismissed'})[e.state]||'';
 // The watcher writes citations as [label](msg:<gmail id>); they become Gmail links. Plain text otherwise.
 // 1.70.1: a digest's "## Worth knowing" heading and "- " lines read as a heading and bullets, not as raw marks.
+// 1.95: headings, bullets and paragraphs are blocks with room between them. Until now a digest's items ran together with
+// single line breaks and read as one paragraph (Damon).
+const inboxCite=s=>esc(s||'').replace(/\[([^\]\n]{1,80})\]\(msg:([0-9a-f]{6,24})\)/g,(m,label,id)=>`<a href="${INBOX_GMAIL_MSG}${id}" target="_blank" rel="noopener">${label}</a>`);
 function inboxText(text){
- return esc(text||'').replace(/\[([^\]\n]{1,80})\]\(msg:([0-9a-f]{6,24})\)/g,(m,label,id)=>`<a href="${INBOX_GMAIL_MSG}${id}" target="_blank" rel="noopener">${label}</a>`)
-  .replace(/^#{1,3}[ \t]+(.+)$/gm,'<strong>$1</strong>').replace(/^[ \t]*[-*][ \t]+/gm,'• ').replace(/\n/g,'<br>');
+ const out=[];let list=null;
+ for(const raw of String(text||'').split('\n')){
+  const l=raw.trim();if(!l)continue;
+  const h=/^#{1,3}[ \t]+(.+)$/.exec(l),b=/^[-*][ \t]+(.+)$/.exec(l);
+  if(b){if(!list){list=[];out.push(list);}list.push(`<li>${inboxCite(b[1])}</li>`);continue;}
+  list=null;out.push(h?`<p class="inbox-h">${inboxCite(h[1])}</p>`:`<p>${inboxCite(l)}</p>`);
+ }
+ return out.map(x=>Array.isArray(x)?`<ul>${x.join('')}</ul>`:x).join('');
+}
+/* 1.95: a digest's or look-ahead's items (inbox.mjs items), each a card with the choices an Inbox entry has. Add to Inbox asks the
+   watcher to send that story as an alert of its own and, from a digest, to learn from it; Resolved, Not useful and Dismiss land on that story, not on the whole
+   digest; Undo takes any of them back, except an alert the watcher has already sent. A line on a story that is on the list opens
+   that entry and shows its state, so the story is decided in one place. A line that resolved overnight or was taken off by the
+   tidy pass is history and only links to Gmail. */
+const INBOX_SECTION={held:'Held overnight',resolved:'Came up overnight and already resolved',worth:'Worth knowing',tidied:'Taken off your Inbox',listed:'Already on your list',ahead:'Coming up'};
+const INBOX_ITEM_STATE={alerted:'Added to Inbox',resolved:'Resolved',not_useful:'Not useful',dismissed:'Dismissed'};
+const inboxItemWord=it=>it.state==='alerted'&&!it.ackedAt?'Adding to Inbox':INBOX_ITEM_STATE[it.state]||it.state;
+const inboxActable=it=>it.section==='worth'||it.section==='held'||it.section==='ahead';
+function inboxItemHTML(it,e){
+ const ahead=e?.kind==='lookahead';
+ if(it.section==='listed'&&!ahead){ // 1.95 (Brad): an open entry already has this story; one line that opens it, never a new card
+  const t=inboxTarget({url:it.url||''}),first=inboxFirst(it.text);
+  return `<p class="inbox-item-listed">${t?`<a href="${esc(t.startsWith('#')?t:'#'+t)}">${esc(it.title)}</a>`:`<strong>${esc(it.title)}</strong>`}${it.state!=='open'&&INBOX_ITEM_STATE[it.state]?` <strong class="inbox-item-state">${esc(inboxItemWord(it))}</strong>`:''}${first?` <span>${esc(first)}</span>`:''}</p>`;
+ }
+ const facts=[it.story?esc(it.story.replace(/-/g,' ')):'',it.priority&&it.priority!=='normal'?esc(it.priority):''].filter(Boolean).join(' · ');
+ const onList=it.section==='listed'?inboxTarget({url:it.url||''}):''; // 1.95: a look-ahead keeps what it found about a story on the list, and opens that entry
+ const acts=onList?`${it.state!=='open'?`<span class="inbox-item-state">${esc(inboxItemWord(it))}</span>`:''}<a class="chip" href="${esc(onList.startsWith('#')?onList:'#'+onList)}" data-item-chat>${IC.inbox}Open in Inbox</a>`:!inboxActable(it)?'':it.state!=='open'?`<span class="inbox-item-state">${esc(inboxItemWord(it))}</span>${it.state==='alerted'&&it.ackedAt?'':`<button class="chip" data-item-act="restore" data-item="${esc(it.ref)}" title="Take that back">Undo</button>`}`
+  :`<button class="chip inbox-item-alert" data-item-act="alert" data-item="${esc(it.ref)}" title="${ahead?'Put this in your Inbox as an alert of its own':'Put this in your Inbox as an alert of its own; the watcher alerts on this kind of thing from now on'}">${IC.inbox}Add to Inbox</button><button class="chip" data-item-act="resolve" data-item="${esc(it.ref)}" title="This situation is over; the watcher stops following it">${IC.tick}Resolved</button><button class="chip" data-item-act="not_useful" data-item="${esc(it.ref)}" title="Don’t tell me about this kind of thing">${IC.bellOff}Not useful</button><button class="chip" data-item-act="dismiss" data-item="${esc(it.ref)}" title="Take this off the digest; the watcher learns nothing from it">${IC.x}Dismiss</button>`;
+ const sess=inboxActable(it)?inboxSession(it):null,chat=sess?`<a class="chip" href="#/chat/${esc(sess.id)}" data-item-chat>${IC.chat}Open the conversation</a>`:'';
+ const talk=inboxActable(it)&&inboxTarget({url:it.url||''})?`<button class="chip" data-item-go="${esc(it.ref)}" title="A new conversation already briefed with this story and its evidence; the watcher learns nothing from it">${IC.plus}${sess?'Start another':'Start a conversation'}</button>`:''; // 1.95.1: about this one line, now, no rule
+ return `<article class="inbox-item-card state-${esc(it.state)}" data-item-card="${esc(it.ref)}"><h4>${esc(it.title)}</h4>${it.text?`<div class="inbox-body">${inboxText(it.text)}</div>`:''}${facts?`<p class="inbox-item-facts">${facts}</p>`:''}<div class="inbox-item-actions">${chat}${talk}${acts}${it.gmail?`<a class="chip" href="${esc(it.gmail)}" target="_blank" rel="noopener">${IC.globe}Gmail</a>`:''}</div></article>`;
+}
+function inboxItemsHTML(e){
+ const groups=[];let sec=null;
+ for(const it of e.items){if(it.section!==sec){sec=it.section;groups.push({sec,items:[]});}groups[groups.length-1].items.push(it);}
+ const rest=String(e.text||'').split('\n').filter(l=>l.trim()&&!/^#{1,3}[ \t]/.test(l)&&!/^[ \t]*[-*][ \t]/.test(l)); // what the text says besides its items (how many threads were ignored; a look-ahead's lead line)
+ if(e.kind==='lookahead')return `${rest.length?`<div class="inbox-body inbox-lead">${inboxText(rest.join('\n'))}</div>`:''}<section class="inbox-items"><h3>${INBOX_SECTION.ahead} <span>${e.items.length}</span></h3>${e.items.map(it=>inboxItemHTML(it,e)).join('')}</section>`;
+ return groups.map(g=>`<section class="inbox-items"><h3>${esc(INBOX_SECTION[g.sec]||g.sec)} <span>${g.items.length}</span></h3>${g.items.map(it=>inboxItemHTML(it,e)).join('')}</section>`).join('')+(rest.length?`<div class="inbox-body inbox-rest">${inboxText(rest.join('\n'))}</div>`:'');
 }
 const inboxFirst=text=>{const t=String(text||'').replace(/\[([^\]\n]{1,80})\]\(msg:[0-9a-f]{6,24}\)/g,'$1').replace(/^#{1,3}[ \t]+.*$/gm,'').replace(/^[ \t]*[-*][ \t]+/gm,'').replace(/\s+/g,' ').trim();const m=/^(.{20,220}?[.!?])(\s|$)/.exec(t);return m?m[1]:t.slice(0,220);};
 const inboxWhen=iso=>{const d=new Date(iso);return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}).replace(' ',' ').toLowerCase();};
@@ -197,7 +236,7 @@ function inboxSheet(id){
  const facts=[`<span>${esc(inboxDay(e.at))} ${esc(inboxWhen(e.at))}</span>`,e.story?`<span>${esc(e.story.replace(/-/g,' '))}</span>`:'',`<span>${inboxKindWord(e)}</span>`,e.priority&&e.priority!=='normal'?`<span>${esc(e.priority)}</span>`:'',inboxStateWord(e)?`<span>${inboxStateWord(e)}</span>`:''].filter(Boolean).join(''); // the sheet's facts stack one per line, as a task's do
  const target=inboxTarget(e),gone=['dismissed','resolved','not_useful'].includes(e.state),sess=inboxSession(e),n=e.sessions?.length||0;
  sh.innerHTML=`<h2>${e.kind==='alert'?'Alert':e.kind==='digest'?'Digest':'Look-ahead'}</h2><p class="task-text">${esc(e.title)}</p><div class="task-facts">${facts}</div>
-  <div class="task-summary inbox-body">${inboxText(e.text)}</div>
+  ${e.items?.length?`<div class="inbox-items-wrap" data-items>${inboxItemsHTML(e)}</div>`:`<div class="task-summary inbox-body">${inboxText(e.text)}</div>`}
   ${sess?`<a class="opt" href="#/chat/${esc(sess.id)}" data-chat>${IC.chat}<span>Open the conversation<span class="sub">${n>1?`The latest of ${n}, started`:'Started'} ${esc(inboxDay(sess.at))} ${esc(inboxWhen(sess.at))}</span></span></a>`:''}
   ${target?`<button class="opt" data-go>${e.doc&&!e.url?IC.doc:IC.plus}<span>${e.doc&&!e.url?'Open in Files':sess?'Start another conversation':'Start a conversation'}<span class="sub">${e.doc&&!e.url?'The full text, kept in Files':'New conversation, already briefed with the story and the evidence; nothing starts until you press Start'}</span></span></button>`:''}
   ${e.gmail?`<a class="opt" href="${esc(e.gmail)}" target="_blank" rel="noopener">${IC.globe}<span>Open in Gmail</span></a>`:''}
@@ -210,6 +249,18 @@ function inboxSheet(id){
  sh.querySelector('[data-useless]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'not_useful',id},'Noted: not useful');});
  sh.querySelector('[data-dismiss]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'dismiss',id},'Dismissed');});
  sh.querySelector('[data-restore]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'restore',id},'Restored');});
+ const ITEM_DONE={alert:e.kind==='lookahead'?'Adding it to your Inbox at the next check':'Adding it to your Inbox at the next check. The watcher learns from it',resolve:'Marked resolved',not_useful:'Noted: not useful',dismiss:'Dismissed',restore:'Undone'};
+ const bindItems=()=>{sh.querySelectorAll('[data-item-act]').forEach(b=>b.onclick=async()=>{ // 1.95: the sheet stays open; the card repaints with its new state
+  const act=b.dataset.itemAct,ref=b.dataset.item;b.disabled=true;
+  const ent=await inboxAct({action:act,id,item:ref},ITEM_DONE[act]);
+  const wrap=sh.querySelector('[data-items]');
+  if(ent&&wrap){wrap.innerHTML=inboxItemsHTML(ent);bindItems();}else b.disabled=false;
+ });bindItemGo();};
+ const bindItemGo=()=>{sh.querySelectorAll('[data-item-go]').forEach(b=>b.onclick=()=>{ // 1.95.1: the item's own start link opens like an entry's
+  const it=(inboxById(id)?.items||[]).find(x=>x.ref===b.dataset.itemGo),t=it?inboxTarget({url:it.url||''}):'';
+  if(!t)return;closeCurrentSheet?.();if(/^https?:\/\//.test(t))window.open(t,'_blank','noopener');else location.hash=t;
+ });sh.querySelectorAll('[data-item-chat]').forEach(a=>a.onclick=()=>closeCurrentSheet?.());};
+ bindItems();
  if(e.state==='new')inboxMarkRead(e);
  mountSheet(scrim,sh);
 }
@@ -263,6 +314,7 @@ function watchStatus(w){
  const now=st?st.every===0?'Not checking now':`Checking ${watchEvery(st.every).toLowerCase()} now`:'';
  return `${now}${st?.period?` (${st.period})`:''}.${st?.lastCheckAt?` Last check ${watchTime(st.lastCheckAt)}`:''}${st?.nextCheckAt?`, next about ${watchTime(st.nextCheckAt)}.`:st?.lastCheckAt?'.':''}${pending}`;
 }
+const watchQuietNote=digest=>digest==null?'In quiet hours only critical alerts reach you. With the digest off, the rest arrive one by one when quiet hours end, and what would only have been a digest line is not sent.':'In quiet hours only critical alerts reach you; the rest wait for the morning digest.';
 function watchSelect(id,label,values,current,word,extra=''){
  return `<label class="voice-field">${label}<select id="${id}" ${extra}>${values.map(v=>`<option value="${v===null?'off':v}"${v===current||(v===null&&current==null)?' selected':''}>${word(v)}</option>`).join('')}</select></label>`;
 }
@@ -321,8 +373,8 @@ async function inboxWatchSheet(){
    <span class="vault-set-actions"><button type="button" class="chip" id="w-add">${IC.plus}Add a period</button></span></div>
   <div class="title-settings model-offer" role="group" aria-labelledby="w-times-h"><p class="vault-set-head" id="w-times-h">Quiet hours and summaries</p>
    <div class="watch-pair">${watchSelect('w-quiet-from','Quiet from',hours,s.quietHours[0],watchHour)}${watchSelect('w-quiet-to','Until',hours,s.quietHours[1],watchHour)}</div>
-   <p class="title-note">In quiet hours only critical alerts reach you; the rest wait for the morning digest.</p>
-   <div class="watch-pair">${watchSelect('w-digest','Morning digest',hours,s.digestHour,watchHour)}</div>
+   <p class="title-note" id="w-quiet-note">${watchQuietNote(s.digestHour)}</p>
+   <div class="watch-pair">${watchSelect('w-digest','Morning digest',[null,...hours],s.digestHour,v=>v===null?'Off':watchHour(v))}</div>
    <div class="watch-pair">${watchSelect('w-la-morning','Morning look-ahead',[null,...hours],s.lookahead?.morning,v=>v===null?'Off':watchHour(v))}${watchSelect('w-la-evening','Evening look-ahead',[null,...hours],s.lookahead?.evening,v=>v===null?'Off':watchHour(v))}</div>
    <p class="title-note">The look-ahead checks what is coming due in the next few days and says so only when something needs you.</p></div>
   ${s.tidy?`<div class="title-settings model-offer" role="group" aria-labelledby="w-tidy-h"><p class="vault-set-head" id="w-tidy-h">Keep the Inbox tidy</p>
@@ -358,6 +410,7 @@ async function inboxWatchSheet(){
  $w('#w-fp')?.addEventListener('click',e=>{s.firstPass.enabled=!s.firstPass.enabled;e.currentTarget.setAttribute('aria-pressed',String(s.firstPass.enabled));e.currentTarget.querySelector('.dot').classList.toggle('on',s.firstPass.enabled);});
  $w('#w-pause').onclick=e=>{s.paused=!s.paused;e.currentTarget.setAttribute('aria-pressed',String(s.paused));e.currentTarget.querySelector('.dot').classList.toggle('on',s.paused);};
  const hourVal=id=>{const v=$w(id).value;return v==='off'?null:Number(v);};
+ $w('#w-digest').addEventListener('change',()=>{$w('#w-quiet-note').textContent=watchQuietNote(hourVal('#w-digest'));});
  const collect=()=>{
   readPeriods();
   const out={paused:Boolean(s.paused),every:Number($w('#w-every').value),periods:s.periods,quietHours:[hourVal('#w-quiet-from'),hourVal('#w-quiet-to')],digestHour:hourVal('#w-digest'),

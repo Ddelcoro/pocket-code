@@ -229,6 +229,24 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/inbox')return json({...inboxStore.snapshot({state:url.searchParams.get('state')||'new',since:url.searchParams.get('since')||undefined}),push:{enabled:false},email:Boolean(fixtureSettings.notifyEmail)});
   if(url.pathname==='/api/inbox/act'){let raw='';for await(const c of req)raw+=c;try{return json({ok:true,entry:inboxStore.act(JSON.parse(raw),{actor:'ui'})});}catch(e){return json({error:e.message},e.status||400);}}
   if(url.pathname==='/api/inbox/reset'){seedInbox();inboxStore.checks={};return json({ok:true});}
+  if(url.pathname==='/api/inbox/digest-cards'){ // 1.95: a digest whose story is also an open alert, and two lines of its own
+   const al=inboxStore.add({kind:'alert',title:'Gate controller offline',text:'The north gate stopped answering at 6:12.',story:'north-gate',source:'inbox-monitor'},{actor:'cli'});
+   const d=inboxStore.add({kind:'digest',title:'Morning email digest — Sat Nov 7',text:'## Worth knowing\n- Payout deductions\nIgnored since the last digest: 12 threads.',source:'inbox-monitor',items:[
+    {ref:'a1',section:'worth',title:'Payout deductions',text:'The scheduled payout includes $267.48 in deductions.',story:'payout',url:'/#/start/0123456789ad'},
+    {ref:'a2',section:'worth',title:'Vendor price list',text:'The new price list starts Monday.',story:'vendor-prices',url:'/#/start/0123456789ae'},
+    {ref:'a3',section:'worth',title:'North gate',text:'The north gate stopped answering.',story:'north-gate',url:'/#/start/0123456789af'},
+   ]},{actor:'cli'});
+   return json({ok:true,digest:d.id,alert:al.id});
+  }
+  if(url.pathname==='/api/inbox/lookahead-cards'){ // 1.95: a look-ahead with a story on the list, a story of its own and an item on no story
+   const al=inboxStore.add({kind:'alert',title:'Gate controller offline',text:'The north gate stopped answering at 6:12.',story:'north-gate',source:'inbox-monitor'},{actor:'cli'});
+   const l=inboxStore.add({kind:'lookahead',title:'Look-ahead · Sat 8 AM',text:'Three things worth catching before Monday:\n- The card payment has to settle by Tuesday.\n- North gate is still down.\n- Veterans Day closes the banks.',source:'inbox-monitor',items:[
+    {ref:'c9.1',section:'ahead',title:'Card payment',text:'The card payment has to settle by Tuesday.',story:'card-payment',priority:'high',url:'/#/start/0123456789b1'},
+    {ref:'c9.2',section:'ahead',title:'North gate',text:'North gate is still down.',story:'north-gate'},
+    {ref:'c9.3',section:'ahead',title:'Veterans Day closes the banks.',text:'Veterans Day closes the banks.',url:'/#/start/0123456789b2'},
+   ]},{actor:'cli'});
+   return json({ok:true,lookahead:l.id,alert:al.id});
+  }
   if(url.pathname==='/api/inbox/check')return json({ok:true,...inboxStore.requestCheck('')}); // 1.75: Check now
   if(url.pathname==='/api/inbox/check-done'){const k=inboxStore.watchSource(),p=inboxStore.profiles[k].profile;p.status={...p.status,checkRequestDone:inboxStore.checks[k]?.at};inboxStore.add({kind:'alert',title:'Added in Gmail: quote request',text:'Pat asks for a quote by Friday.',source:k},{actor:'cli'});return json({ok:true});} // the watcher reports it done, with what it found
   if(url.pathname==='/api/inbox/watch'){ // 1.70

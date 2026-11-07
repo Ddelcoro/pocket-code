@@ -2776,6 +2776,55 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    }finally{Object.assign(settings,before);settings.assistantMode=false;await page.evaluate(()=>fetch('/api/inbox/reset',{method:'POST'}));if(vp)await page.setViewport(vp);await page.goto(base+'/#/');}
   });
 
+  await check('1.95 digest cards: a card has the Inbox choices, and a story that is on the list opens that entry instead of being a second thing to work',async()=>{
+   const settings=settingsState(),before={inbox:settings.inbox},vp=page.viewport();
+   settings.inbox=true;
+   try{
+    await page.evaluate(()=>fetch('/api/inbox/reset',{method:'POST'}));
+    const {digest,alert}=await page.evaluate(()=>fetch('/api/inbox/digest-cards',{method:'POST'}).then(r=>r.json()));
+    for(const w of [390,1440]){
+     await page.setViewport({width:w,height:w===390?844:900});await page.goto(base+'/#/inbox/'+digest);await page.reload();await page.waitForSelector('.inbox-sheet [data-item-card="a1"]');
+     assert.deepEqual(await page.$$eval('.inbox-sheet [data-item-card="a1"] .inbox-item-actions > *',es=>es.map(e=>e.textContent.trim())),['Start a conversation','Add to Inbox','Resolved','Not useful','Dismiss']);
+     assert.equal(await page.$('.inbox-sheet [data-item-card="a3"]'),null,'no card for a story on the list');
+     assert.equal(await page.$eval('.inbox-sheet .inbox-item-listed a',e=>e.getAttribute('href')),'#/inbox/'+alert,'the line opens the entry');
+     await page.mouse.move(1,1);await page.evaluate(()=>document.querySelector('#tip')?.setAttribute('hidden',''));await scan('digest-cards-'+w);
+     await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.inbox-sheet'));
+    }
+    await page.goto(base+'/#/inbox/'+digest);await page.reload();await page.waitForSelector('.inbox-sheet [data-item-card="a1"]');
+    await clickControl(page,'.inbox-sheet [data-item-card="a1"] [data-item-act="dismiss"]');await page.waitForSelector('.inbox-sheet .inbox-item-card.state-dismissed');
+    assert.deepEqual(await page.$$eval('.inbox-sheet [data-item-card="a1"] .inbox-item-actions > *',es=>es.map(e=>e.textContent.trim())),['Start a conversation','Dismissed','Undo'],'the sheet stays open and the card says what happened');
+    await clickControl(page,'.inbox-sheet [data-item-card="a1"] [data-item-act="restore"]');await page.waitForFunction(()=>document.querySelector('.inbox-sheet [data-item-card="a1"]')?.classList.contains('state-open'));
+    await page.evaluate(id=>fetch('/api/inbox/act',{method:'POST',body:JSON.stringify({action:'resolve',id})}),alert);
+    await page.reload();await page.waitForSelector('.inbox-sheet .inbox-item-listed .inbox-item-state');
+    assert.equal(await page.$eval('.inbox-sheet .inbox-item-listed .inbox-item-state',e=>e.textContent),'Resolved','the line shows what happened to the entry');
+    await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.inbox-sheet'));
+   }finally{Object.assign(settings,before);await page.evaluate(()=>fetch('/api/inbox/reset',{method:'POST'}));if(vp)await page.setViewport(vp);await page.goto(base+'/#/');}
+  });
+
+  await check('1.95 look-ahead cards: its lead line, then its items in order with the same choices, and a story on the list opens that entry',async()=>{
+   const settings=settingsState(),before={inbox:settings.inbox},vp=page.viewport();
+   settings.inbox=true;
+   try{
+    await page.evaluate(()=>fetch('/api/inbox/reset',{method:'POST'}));
+    const {lookahead,alert}=await page.evaluate(()=>fetch('/api/inbox/lookahead-cards',{method:'POST'}).then(r=>r.json()));
+    for(const w of [390,1440]){
+     await page.setViewport({width:w,height:w===390?844:900});await page.goto(base+'/#/inbox/'+lookahead);await page.reload();await page.waitForSelector('.inbox-sheet [data-item-card="c9.1"]');
+     assert.equal(await page.$eval('.inbox-sheet .inbox-lead',e=>e.textContent),'Three things worth catching before Monday:');
+     assert.deepEqual(await page.$$eval('.inbox-sheet [data-item-card]',es=>es.map(e=>e.dataset.itemCard)),['c9.1','c9.2','c9.3'],'most pressing first, the listed one in its place');
+     assert.deepEqual(await page.$$eval('.inbox-sheet [data-item-card="c9.1"] .inbox-item-actions > *',es=>es.map(e=>e.textContent.trim())),['Start a conversation','Add to Inbox','Resolved','Not useful','Dismiss']);
+     assert.deepEqual(await page.$$eval('.inbox-sheet [data-item-card="c9.2"] .inbox-item-actions > *',es=>es.map(e=>e.textContent.trim())),['Open in Inbox'],'decided on its entry');
+     assert.equal(await page.$eval('.inbox-sheet [data-item-card="c9.2"] .inbox-item-actions a',e=>e.getAttribute('href')),'#/inbox/'+alert);
+     assert.match(await page.$eval('.inbox-sheet [data-item-card="c9.2"] .inbox-body',e=>e.textContent),/still down/,'the card keeps what the look-ahead found');
+     await page.mouse.move(1,1);await page.evaluate(()=>document.querySelector('#tip')?.setAttribute('hidden',''));await scan('lookahead-cards-'+w);
+     await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.inbox-sheet'));
+    }
+    await page.goto(base+'/#/inbox/'+lookahead);await page.reload();await page.waitForSelector('.inbox-sheet [data-item-card="c9.1"]');
+    await clickControl(page,'.inbox-sheet [data-item-card="c9.1"] [data-item-act="alert"]');await page.waitForSelector('.inbox-sheet .inbox-item-card.state-alerted');
+    assert.deepEqual(await page.$$eval('.inbox-sheet [data-item-card="c9.1"] .inbox-item-actions > *',es=>es.map(e=>e.textContent.trim())),['Start a conversation','Adding to Inbox','Undo'],'it says what is happening until the watcher has sent it');
+    await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('.inbox-sheet'));
+   }finally{Object.assign(settings,before);await page.evaluate(()=>fetch('/api/inbox/reset',{method:'POST'}));if(vp)await page.setViewport(vp);await page.goto(base+'/#/');}
+  });
+
   await check('1.70 Inbox Watch settings: periods, quiet hours and summaries, models and cost; Save reaches the store; Assistant mode shows no models or dollars',async()=>{
    const settings=settingsState(),before={inbox:settings.inbox,assistantMode:settings.assistantMode},vp=page.viewport();
    settings.inbox=true;
@@ -2787,6 +2836,9 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
      await page.waitForFunction(()=>[...document.querySelectorAll('.watch-sheet')].every(e=>e.getAnimations({subtree:true}).every(a=>a.playState==='finished')));
      assert.match(await page.$eval('#w-status',e=>e.textContent),/^Checking every 5 minutes now\. Last check .*Using the watcher’s config file\.$/);
      assert.deepEqual(await page.$$eval('.watch-sheet .vault-set-head',h=>h.map(x=>x.textContent)),['Your rules','Your list in Gmail','Schedule','Quiet hours and summaries','Keep the Inbox tidy','Models','First pass','Cost, last 7 days']);
+     assert.equal(await page.$eval('#w-digest',e=>e.options[0].textContent),'Off','1.95: the morning digest can be off');assert.match(await page.$eval('#w-quiet-note',e=>e.textContent),/wait for the morning digest/);
+     await page.select('#w-digest','off');assert.match(await page.$eval('#w-quiet-note',e=>e.textContent),/arrive one by one when quiet hours end/,'the note follows the choice');
+     await page.select('#w-digest','8');
      assert.equal(await page.$eval('#w-label',e=>e.getAttribute('aria-pressed')),'true','1.75: the Pocket Inbox label, on by default');assert.match(await page.$eval('#w-label',e=>e.textContent),/Keep a Pocket Inbox label in Gmail/);assert.equal(await page.$('#w-label-off'),null);
      assert.equal(await page.$eval('#w-rules',e=>getComputedStyle(e,'::placeholder').fontStyle),'italic','the placeholder reads as guidance');
      assert.match(await page.$eval('#w-rules',e=>e.placeholder),/^Write your instructions here/);
