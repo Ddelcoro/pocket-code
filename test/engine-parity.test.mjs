@@ -77,6 +77,18 @@ test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', {
       else { const p = s.prompts('acp').find(x => x.text.startsWith('parity one acp')); assert.match(p?.seen?.instructions || '', /choices/, 'OpenRouter got them in its instruction file'); }
     });
 
+    await t.test(`${engine}: a handoff starts once, on the engine it names`, async () => {
+      const made = await s.call('/start', { text: `parity handoff ${engine}`, directory: s.cwd, provider: engine, kind: 'handoff' });
+      assert.equal(made.status, 200, JSON.stringify(made.body));
+      const entry = (await s.call('/start/' + made.body.id)).body;
+      assert.equal(entry.kind, 'handoff'); assert.equal(entry.provider, engine); assert.equal(entry.approvalMode, 'review', 'no proven parent: Review actions');
+      const go = () => s.call('/new', { text: entry.text, cwd: s.cwd, provider: engine, start: made.body.id, approvalMode: 'full' });
+      const first = await go(); assert.equal(first.status, 202, JSON.stringify(first.body));
+      const again = await go(); assert.equal(again.status, 409); assert.equal(again.body.code, 'start_used'); assert.equal(again.body.id, first.body.id);
+      await s.until(() => s.prompts(engine).some(c => c.text.startsWith(`parity handoff ${engine}`)), 15000, `${engine} to receive the handoff`);
+      await s.idle(first.body.id);
+    });
+
     await t.test(`${engine}: a choices block becomes reply buttons`, async () => {
       const id = await s.start(engine, `parity choices ${engine} __CHOICES__`);
       const evs = await s.sse(id, ev => ev.type === 'done' || ev.type === 'idle');

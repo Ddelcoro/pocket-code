@@ -1,6 +1,6 @@
 <!-- manual
-checked: 1.87.0
-sources: choices.mjs, results.mjs, queue.mjs, sidechat.mjs, public/sidechat.js, subagents.mjs, workspace.mjs, public/secret-detect.js
+checked: 1.96.0
+sources: choices.mjs, starts.mjs, results.mjs, queue.mjs, sidechat.mjs, public/sidechat.js, subagents.mjs, workspace.mjs, public/secret-detect.js
 -->
 # Working in a conversation
 
@@ -84,6 +84,7 @@ The list has three groups:
   |---------|--------------|
   | `/btw` | Opens the [side chat](#ask-a-side-question-side-chat); type your question after it |
   | `/branch` | Opens [Branch](#branch-into-a-new-conversation) |
+  | `/handoff` | Asks the agent for a [handoff](#hand-off-to-a-fresh-conversation) |
   | `/new` | Starts a new conversation in this conversation's folder |
   | `/model`, `/effort` | Open the model and effort choices, the same as the chips |
   | `/usage` | Opens Plan usage |
@@ -284,7 +285,7 @@ The side chat needs at least one message in the conversation first. Its messages
 
 ### Branch into a new conversation
 
-Branch starts a new, saved conversation that carries on from this one with everything so far. It can edit files and run
+Branch starts a new, saved conversation that carries on from this one with everything so far ([a handoff](#hand-off-to-a-fresh-conversation) carries a briefing instead). It can edit files and run
 commands, with the permissions chosen for it. The original conversation stays as it is.
 
 1. Choose **Branch** in the chip row above the message box on a computer (an icon in the Working row while the agent works), or
@@ -302,6 +303,29 @@ conversation.
 
 **Use side chat instead** moves your text to the side chat without sending it. A double tap on **Start branch** starts one
 branch, not two.
+
+### Hand off to a fresh conversation
+
+A handoff starts a new conversation that knows only a briefing the agent wrote, not the whole history. Use it when a
+conversation has grown long or the next step is a separate job. Use [Branch](#branch-into-a-new-conversation) when the new
+conversation needs everything said so far: Branch keeps all of it, and each of its replies reads all of it again.
+
+1. Ask the agent to hand off, or pick `/handoff` from the `/` list. The agent writes the briefing.
+2. The reply shows a card, **Continue in a new conversation**, with the title, folder, agent, permissions and the start of
+   the briefing. Assistant mode shows the title and briefing only.
+3. Choose **Start** to begin at once, or **Review first** to read and change the briefing on New conversation.
+
+The new conversation opens with the briefing as its first message. It shows **Continued from …** under its header, and the
+original shows **Continued in …**.
+
+- A handoff starts once. If it has started, the card reads **Started** and links the conversation; Start on another device
+  opens that conversation instead of making a second one.
+- A handoff never has more permission than the conversation that wrote it. It gets Full access only when that conversation
+  and your default are both Full access, otherwise Review actions. Review first can change this, because that is you
+  choosing.
+- A handoff from OpenRouter, or from a terminal outside Pocket, has no conversation to link back to and gets Review actions.
+- If the folder has gone, Start is off and the card says so. Review first lets you choose another folder.
+- Handoff links last 7 days unless the agent sets another length. After that the card says the link has expired.
 
 ### Watch subagents
 

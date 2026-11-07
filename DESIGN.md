@@ -1067,3 +1067,14 @@ only when the parent is working in the same folder, a labelled `queue-editor`, t
 **Start branch**. A branch's `.lineage` line sits at the top of the conversation controls in `--dim` 13.5px with
 clay links: **Branch of …** on a branch, the first three branches on its parent. List rows add `· Branch` to the
 provider label. No new colours, type or motion.
+
+## Handoff card (1.96)
+
+Pinned Operate refinement (design-studio → impeccable): variance 2, motion 1, density 7; existing tokens, no new colour. Read:
+a reply offers to move the work to a fresh conversation, and the person decides in one look. `.handoff-card` is a sibling of
+the file cards: `--surface`, `--line`, 12px radius, 640px at most, no side stripe. The head line is `--dim` beside the hand
+(Lucide hand-helping, side-on; a raised palm reads as stop). Title `--text` semibold, then a `--dim` line with folder, agent
+and permissions, then three lines of the briefing. **Start** is the one `--clay` `.primary`; **Review first** is a chip. Both
+are 44px tall. A started card collapses to its head line with a link, an expired one to a sentence. A missing folder turns
+Start off and adds a `--dim` note; nothing is `--warn` because nothing is wrong yet. The card is `role="group"`, not a
+landmark, because a reply can hold two. No motion.

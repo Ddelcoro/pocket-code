@@ -1562,6 +1562,28 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    assert.equal(await page.$eval('#first',b=>b.value),'Use {{vault:openai-key}} for the sync');
    assert.equal(await page.evaluate(()=>JSON.stringify(localStorage).includes('sk-fixture-openai')),false,'the value is not in the draft');
    await page.evaluate(()=>clearDraft(NEW_KEY));
+   // 1.96: a reply's handoff link is a card. Start begins it once; the same card reads Started afterwards; an unknown id stays a link.
+   {const hid='f00d00000001',gone='f00d00000002',spare='f00d00000003',second='f00d00000004',inline='f00d00000005',convo=conversations.get(rows[0].id);setMode({handoffs:{[hid]:{},[spare]:{folderMissing:true},[second]:{},[inline]:{}}});
+    const before=convo.length;convo.push({role:'assistant',blocks:[{t:'text',text:'Here is the next step.\n\n'+base+'/#/start/'+hid+'\n\n'+base+'/#/start/'+spare+'\n\n'+base+'/#/start/'+gone+'\n\n'+base+'/#/start/'+second+'\n\nSee '+base+'/#/start/'+inline+' when you can.'}]});
+    await page.setViewport({width:1440,height:900});await page.goto(base+'/#/chat/'+rows[0].id);await page.waitForSelector(`[data-handoff="${hid}"] [data-handoff-start]`);
+    const seen=await page.$eval(`[data-handoff="${hid}"]`,e=>({text:e.textContent.replace(/\s+/g,' '),review:e.querySelector('a.chip').getAttribute('href'),hidden:e.previousElementSibling.hidden}));
+    assert.match(seen.text,/Continue in a new conversation/);assert.match(seen.text,/Finish the Oakridge schedule/);assert.match(seen.text,/Review actions/);assert.equal(seen.review,'#/start/'+hid);assert.equal(seen.hidden,true,'the link stays in the reply, hidden, so copying keeps it');
+    assert.equal(await page.$eval(`[data-handoff="${spare}"] [data-handoff-start]`,e=>e.disabled),true,'no Start into a missing folder');
+    assert.match(await page.$eval(`[data-handoff="${spare}"]`,e=>e.textContent),/no longer exists/);
+    assert.equal(await page.$(`[data-handoff="${inline}"]`),null,'a link inside a sentence stays a link');
+    await page.waitForSelector(`[data-handoff="${gone}"]`);assert.match(await page.$eval(`[data-handoff="${gone}"]`,e=>e.textContent),/expired/);
+    await scan('handoff-card-desktop');await (await page.$(`[data-handoff="${hid}"]`)).evaluate(e=>e.scrollIntoView({block:'center'}));await pause(150);await page.screenshot({path:path.join(out,'handoff-card-desktop.png')});
+    await page.setViewport({width:390,height:844});await page.goto(base+'/#/chat/'+rows[0].id);await page.waitForSelector(`[data-handoff="${hid}"] [data-handoff-start]`);
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal overflow at 390');
+    assert.equal(await page.$eval(`[data-handoff="${hid}"] [data-handoff-start]`,e=>e.getBoundingClientRect().height>=44),true,'a 44px target');
+    await scan('handoff-card-mobile');await (await page.$(`[data-handoff="${hid}"]`)).evaluate(e=>e.scrollIntoView({block:'center'}));await pause(150);await page.screenshot({path:path.join(out,'handoff-card-mobile.png')});
+    await page.setViewport({width:1440,height:900});await clickControl(page,`[data-handoff="${hid}"] [data-handoff-start]`);await page.waitForFunction(id=>location.hash==='#/chat/'+id,{},rows[1].id);
+    await page.goto(base+'/#/chat/'+rows[0].id);await page.waitForFunction(id=>document.querySelector(`[data-handoff="${id}"]`)?.textContent.includes('Started:'),{},hid);
+    assert.equal(await page.$(`[data-handoff="${hid}"] [data-handoff-start]`),null,'one conversation: no second Start');
+    // A second device, whose card still says Start, opens the conversation that exists.
+    await page.waitForSelector(`[data-handoff="${second}"] [data-handoff-start]`);Object.assign(getMode().handoffs[second],{startedSession:rows[2].id,startedTitle:rows[2].title});
+    await clickControl(page,`[data-handoff="${second}"] [data-handoff-start]`);await page.waitForFunction(id=>location.hash==='#/chat/'+id,{},rows[2].id);
+    convo.splice(before);}
    // The phone: a Vault chip on the session home, the list full-screen without sideways scrolling.
    await page.setViewport({width:390,height:844});await page.goto(base+'/#/');await page.waitForSelector('[data-vault-home]');
    await clickControl(page,'[data-vault-home]');await page.waitForSelector('.vault-item');

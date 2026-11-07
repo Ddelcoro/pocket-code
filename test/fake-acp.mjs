@@ -27,7 +27,8 @@ if (!STORE) throw new Error('POCKET_ACP_STORE required');
 fs.mkdirSync(STORE, { recursive: true });
 const sessFile = id => path.join(STORE, encodeURIComponent(id) + '.json');
 const loadSess = id => { try { return JSON.parse(fs.readFileSync(sessFile(id), 'utf8')); } catch { return null; } };
-const saveSess = (id, s) => fs.writeFileSync(sessFile(id), JSON.stringify(s));
+// Written beside the store and renamed in, so a test reading the store never sees half a file.
+const saveSess = (id, s) => { const tmp = `${STORE}.${process.pid}.tmp`; fs.writeFileSync(tmp, JSON.stringify(s)); fs.renameSync(tmp, sessFile(id)); };
 
 // Exit cleanly when the client goes away, so a test never leaks this child.
 process.stdin.on('end', () => process.exit(0));

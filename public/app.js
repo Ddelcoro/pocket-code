@@ -9,6 +9,7 @@ const IC = {
   inbox: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l2.5-7.5h11L20 13v6H4zM4 13h5l1.5 2.5h3L15 13h5"/></svg>', // 1.69
   vault: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>', // 1.69: the rail's Vault entry
   chat: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H10l-4 3.5v-3.5H5z"/></svg>', // 1.69
+  hand: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 12h2a2 2 0 100-4h-3c-.6 0-1.1.2-1.4.6L3 14"/><path d="M7 18l1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 00-2.75-2.91l-4.2 3.9"/><path d="M2 13l6 6"/></svg>', // 1.96: a side-on hand passing something, never a raised palm (that reads as stop). Lucide hand-helping, ISC
   branch: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="5.5" r="2"/><circle cx="7" cy="18.5" r="2"/><circle cx="17" cy="7.5" r="2"/><path d="M7 7.5v9M17 9.5c0 4.5-10 2.5-10 7"/></svg>', // 1.79
   // 1.76.2: the rail switch's own glyphs, one silhouette each (a bubble, a flag, a page, a circle, a lock, an envelope),
   // since a folder, a page, a checkbox and a tray all read as the same small box. The folder stays the workspace glyph.
@@ -2096,8 +2097,76 @@ function fileCardHTML(id, r) {
     <span class="file-card-body"><span class="file-card-name">${esc(name)}</span><span class="file-card-meta">${esc(r.detail || ext + ' file')}</span></span></a>
     <span class="file-card-actions">${keep}<a class="chip" href="${esc(artifactUrl(id, r.target))}" download>Download</a></span></div>`;
 }
+// 1.96: a handoff. A reply line holding only one of this Pocket's handoff links becomes a card. The server knows the id or it
+// is not ours, so a link to another Pocket or an old start link stays a link. The paragraph stays, hidden, so copying the
+// reply keeps the link.
+const HANDOFF_LINK = /^(?:https?:\/\/[^\s/]+)?\/#\/start\/([0-9a-f]{12})$/;
+const handoffCache = new Map();
+function handoffLineId(p) {
+  const a = p.querySelector('a');
+  if (p.children.length !== (a ? 1 : 0) || (a && a.textContent.trim() !== p.textContent.trim())) return null;
+  return (a ? a.getAttribute('href') : p.textContent).trim().match(HANDOFF_LINK)?.[1] || null;
+}
+function handoffCardHTML(id, s) {
+  if (!s) return `<div class="handoff-card" data-handoff="${id}"><div class="handoff-head">${IC.hand}<span>This handoff link has expired. Ask the agent for a new one.</span></div></div>`;
+  const label = 'Continue in a new conversation';
+  if (s.startedSession) return `<div class="handoff-card" data-handoff="${id}"><div class="handoff-head">${IC.hand}<span>Started: <a href="#/chat/${esc(s.startedSession)}">${esc(s.startedTitle || 'New conversation')}</a></span></div></div>`;
+  const agent = { claude: 'Claude', codex: 'Codex', acp: 'OpenRouter' }[s.provider] || '';
+  const meta = assistantMode() ? [] : [s.directory ? projName(s.directory) : '', agent, permissionLabel(s.approvalMode)].filter(Boolean);
+  const canStart = !s.folderMissing && Boolean(s.directory);
+  return `<div class="handoff-card" data-handoff="${id}" role="group" aria-label="${label}">
+    <div class="handoff-head">${IC.hand}<span>${label}</span></div>
+    ${s.title ? `<div class="handoff-title">${esc(s.title)}</div>` : ''}
+    ${meta.length ? `<div class="handoff-meta">${esc(meta.join(' · '))}</div>` : ''}
+    <p class="handoff-text">${esc(String(s.text || '').slice(0, 400))}</p>
+    ${s.folderMissing ? `<p class="handoff-note">That folder no longer exists. Review first to choose another.</p>` : ''}
+    <div class="handoff-actions"><button type="button" class="primary" data-handoff-start${canStart ? '' : ' disabled'}>Start</button><a class="chip" href="#/start/${id}">Review first</a></div></div>`;
+}
+async function loadHandoff(id, fresh) {
+  const hit = handoffCache.get(id);
+  if (hit && !fresh && Date.now() - hit.at < 4000) return hit.data;
+  let data = null;
+  try { data = await api('/start/' + id); } catch (e) { if (e.status !== 404) return hit?.data; }
+  if (data && data.kind !== 'handoff') data = undefined; // a plain start link stays a plain link
+  handoffCache.set(id, { at: Date.now(), data });
+  return data;
+}
+async function paintHandoffCards(container, fresh = false) {
+  const lines = [...container.querySelectorAll(':scope > .m-asst:not(.live) p:not(.handoff-text):not(.handoff-note)')].map(p => [p, handoffLineId(p)]).filter(([, id]) => id);
+  for (const [p, id] of lines) {
+    const s = await loadHandoff(id, fresh);
+    if (s === undefined || !p.isConnected) continue;
+    const html = handoffCardHTML(id, s), old = p.nextElementSibling?.matches('[data-handoff]') ? p.nextElementSibling : null;
+    if (old?.dataset.painted === html) continue;
+    old?.remove();
+    p.hidden = true;
+    p.insertAdjacentHTML('afterend', html);
+    p.nextElementSibling.dataset.painted = html;
+  }
+}
+async function startHandoff(id, btn) {
+  const s = handoffCache.get(id)?.data; if (!s) return;
+  btn.disabled = true;
+  try {
+    const d = await api('/new', { method: 'POST', body: JSON.stringify({ text: s.text, cwd: s.directory, provider: s.provider || undefined, start: id, approvalMode: s.approvalMode }) });
+    setPrefs(d.id, { model: 'default', effort: 'default', executionMode: 'work', approvalMode: s.approvalMode });
+    handoffCache.delete(id);
+    location.hash = '#/chat/' + d.id;
+  } catch (e) {
+    if (e.message === 'login') return;
+    if (e.code === 'start_used') { handoffCache.delete(id); location.hash = '#/chat/' + e.body.id; return; }
+    if (e.status === 409) { toast('That handoff is starting.'); return paintHandoffCards($('#msgs'), true); }
+    if (e.status === 422) { toast('This briefing may contain a secret. Review it first.'); location.hash = '#/start/' + id; return; }
+    btn.disabled = false; toast('Could not start the conversation. Try again.');
+  }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-handoff-start]');
+  if (b) startHandoff(b.closest('[data-handoff]').dataset.handoff, b);
+});
 async function paintFileCards(container, fresh = false) {
   const id = chatId; if (!id || !container) return;
+  paintHandoffCards(container, fresh).catch(() => { });
   const seq = ++cardSeq;
   if (fresh || cardResults.id !== id || Date.now() - cardResults.at > 4000) {
     let d; try { d = await api('/session/' + encodeURIComponent(id) + '/results'); } catch { return; }
@@ -3219,6 +3288,7 @@ function scrollBottom(force) {
 const SLASH_POCKET = [
   { name: 'btw', desc: 'Ask in a side chat, without adding to this conversation', where: 'chat', working: true, insert: true, ok: () => SideChat.available(chatId) },
   { name: 'branch', desc: 'Start a saved conversation that carries on from here', where: 'chat', working: true, ok: () => Boolean(chatId) && engineHas(providerOf(chatId), 'branch'), act: () => Branch.open(chatId) },
+  { name: 'handoff', desc: 'Have the agent write a briefing and offer a fresh conversation', where: 'chat', ok: () => Boolean(chatId), act: () => sendMsg('Hand this off: write a briefing for a new conversation to pick up from here, and give me the handoff card.') },
   { name: 'new', desc: 'Start a new conversation in this folder', where: 'chat', working: true, act: () => { writeLocal('pc-new-start', { cwd: slashCwd }); localStorage.setItem('pc-provider', ['codex', 'acp'].includes(tb?.provider) ? tb.provider : 'claude'); location.hash = '#/new'; } },
   { name: 'model', desc: 'Choose the model for the next reply', where: 'both', ok: () => $('#c-model'), act: () => $('#c-model')?.click() },
   { name: 'effort', desc: 'Choose how much it thinks before answering', where: 'both', ok: () => $('#c-eff'), act: () => $('#c-eff')?.click() },
@@ -3664,6 +3734,7 @@ async function openStartLink(id) {
   if (!/^[0-9a-f]{12}$/.test(id)) { toast('That start link is not valid.'); location.replace('#/new'); return; }
   try {
     const s = await api('/start/' + id);
+    if (s.startedSession) { location.replace('#/chat/' + s.startedSession); return; } // 1.96: a handoff starts once
     saveBriefing(s.text || '');
     // 1.81: the link's folder rides in pc-new-start like a project's, so New selects it, or fills it in when it is not
     // listed, over the default workspace (pc-lastproj alone lost to POCKET_DEFAULT_CWD and to the most recent workspace).
@@ -3948,6 +4019,7 @@ async function renderNew({ home = false } = {}) {
       return true;
     } catch (e) {
       if (e.status >= 400 && e.status < 500 && e.code !== 'delivery_uncertain') saveOutbox(NEW_KEY, null);
+      if (e.code === 'start_used') { clearDraft(NEW_KEY); localStorage.removeItem('pc-new-start'); localStorage.removeItem(briefingKey()); location.hash = '#/chat/' + e.body.id; return false; } // 1.96: another tap or device started it
       if (e.code === 'secret_detected') holdSecretStart(newPending?.payload.text || text, e.body?.matches || []);
       else toast(e.message || 'Delivery not confirmed. Retry the same request.');
       return false;

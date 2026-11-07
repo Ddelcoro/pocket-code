@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.94.0
+checked: 1.96.0
 sources: prompts.mjs, starts.mjs, scripts/pocket-start.mjs, search.mjs, titles.mjs, usage.mjs, models.mjs, claude-catalog.mjs, codex.mjs, session-state.mjs, acp.mjs, openrouter.mjs
 -->
 # Conversations (sessions)
@@ -428,6 +428,9 @@ puts the briefing in New conversation's box and selects the agent the link names
 wins over the default workspace: it is selected when it is one of the listed workspaces and filled in
 as a custom path when it is not. Nothing starts until you press Start. A link that has
 expired shows *That start link has expired.*
+
+A [handoff](conversation.md#hand-off-to-a-fresh-conversation) is a start link an agent writes from a conversation. It shows as a card
+in the reply, and it starts once.
 
 Links last 7 days by default (1 to 30), hold up to 20,000 characters of text and a 160-character title,
 and are kept in `starts.json`, at most 500, oldest dropped first.

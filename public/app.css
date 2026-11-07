@@ -1822,6 +1822,18 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 .file-card-name { color: var(--text); font-size: 15.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-card-meta { font-size: 13.5px; color: var(--dim); }
 .file-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+/* 1.96: the handoff card, a sibling of the file cards. Operate: variance 2, motion 1, density 7; clay only on Start. */
+.handoff-card { display: flex; flex-direction: column; gap: 4px; max-width: 640px; margin: 12px 0 4px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.handoff-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--dim); }
+.handoff-head .i { width: 18px; height: 18px; flex: none; }
+.handoff-head a { color: var(--clay); text-decoration-thickness: 1px; overflow-wrap: anywhere; }
+.handoff-title { font-size: 15.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.handoff-meta { font-size: 13.5px; color: var(--dim); overflow-wrap: anywhere; }
+.m-asst .handoff-text { margin: 4px 0 0; font-size: 14.5px; line-height: 1.45; color: var(--text); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.m-asst .handoff-note { margin: 4px 0 0; font-size: 13.5px; color: var(--dim); }
+.handoff-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.handoff-actions .primary { width: auto; min-height: 44px; padding: 0 22px; font-size: 15.5px; border-radius: 12px; }
+.handoff-actions .chip { min-height: 44px; display: inline-flex; align-items: center; }
 .file-card-kept { font-size: 13.5px; color: var(--ok); padding: 0 6px; }
 
 /* 1.62: Try harder, under the latest reply in Assistant mode */

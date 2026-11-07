@@ -205,8 +205,11 @@ const Branch = (() => {
     if (s.branchOf) parts.push(`<span>Branch of ${link(s.branchOf)}</span>`);
     const kids = s.branches || [];
     if (kids.length) parts.push(`<span>${kids.length === 1 ? 'Branch' : kids.length + ' branches'}: ${kids.slice(0, 3).map(link).join(', ')}${kids.length > 3 ? ' and ' + (kids.length - 3) + ' more' : ''}</span>`);
+    if (s.continuedFrom) parts.push(`<span>Continued from ${link(s.continuedFrom)}</span>`); // 1.96: handoffs
+    const next = s.continuedIn || [];
+    if (next.length) parts.push(`<span>Continued in ${next.slice(0, 3).map(link).join(', ')}${next.length > 3 ? ' and ' + (next.length - 3) + ' more' : ''}</span>`);
     el.hidden = !parts.length;
-    el.innerHTML = parts.length ? IC.branch + parts.join('<span class="lineage-sep" aria-hidden="true">·</span>') : '';
+    el.innerHTML = parts.length ? (s.branchOf || kids.length ? IC.branch : IC.hand) + parts.join('<span class="lineage-sep" aria-hidden="true">·</span>') : '';
   }
   return { open, paintLineage };
 })();

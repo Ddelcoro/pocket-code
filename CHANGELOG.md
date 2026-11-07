@@ -3,6 +3,19 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.96.0] — 2026-11-07 · build 189
+
+Requested by Brad (2026-11-07, Release A of `docs/plans/coordination-worktrees-handoff.md`): a long conversation re-reads everything on each reply, and Branch carries all of it. A handoff carries only a briefing.
+
+- **`pocket-start add --handoff`.** Stores a start link with `kind: 'handoff'`. `--dir` defaults to the folder the command runs in. The command sends `POCKET_RUNNER_TOKEN` as `x-pocket-runner`, and the server works out the parent from that token through `vaultCaller`; a parent named in the body is ignored. `StartStore.add` takes the handoff fields only from the server's own argument.
+- **The handoff card.** A reply line holding only one of this Pocket's handoff links becomes a card, a sibling of the file cards, with the title, folder, agent, permissions, the start of the briefing, **Start** and **Review first**. The link stays in the reply, hidden, so copying the reply keeps it. An expired link says so, a link in a sentence stays a link, and a plain start link is untouched. Assistant mode leaves out the folder, agent and permissions.
+- **One conversation per handoff.** `handoffOnce` wraps `/api/new`: a claim in memory while it starts (409 `start_starting`), `startedSession` kept in `starts.json` after (409 `start_used` with the id, which the card follows). The claim is released on any failure, so a refused start can be tried again.
+- **No wider permission.** The mode is Full access only when the parent and the default are both Full access, otherwise Review actions, and `/api/new` forces Review actions for a handoff that says so, whatever the request asks. A handoff with no proven parent gets Review actions. OpenRouter has no runner token, so its handoffs have no parent and get Review actions.
+- **The secret check.** A handoff briefing holding a secret is refused with 422 `secret_detected`; agents are told to name Vault secrets instead.
+- **Lineage.** `continuedFrom` is stored on the new conversation; `continuedIn` is worked out from its children. The header line reads **Continued from** and **Continued in**, beside Branch of.
+- **`/handoff`** in the Pocket group of the `/` list asks the agent for a handoff. Pocket's appended instructions tell every agent how.
+- Tests: `test/handoff.test.mjs` (a forged parent, a bad token, two starts at once, a third, a child that asks for more, a missing folder, the secret check, the CLI); `engine-parity` runs a handoff on all three agents; browser, the card, Start, a second device, a missing folder, an expired link, a link in a sentence, 390 and 1440 with axe.
+
 ## [1.95.0] — 2026-11-07 · build 188
 
 Requested by Damon (2026-11-07): a RingCentral text from a client was judged a digest line, so it never appeared in his Pocket Inbox on its own; when he opened the morning digest it read as one paragraph, and there was nothing he could press on any line to say "this should have been an alert".

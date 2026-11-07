@@ -139,7 +139,7 @@ Times the commands print use the owner's time zone (the zone their browser repor
 `pocket-start` stores a briefing and prints a link that opens **New conversation** with it typed in, in the workspace and with the agent you name. Nothing starts until the user taps Start.
 
 ```text
-pocket-start add --text "…" | --file <path|->  [--dir <workspace>] [--provider claude|codex] [--title "…"] [--ttl-days N] [--json]
+pocket-start add --text "…" | --file <path|->  [--handoff] [--dir <workspace>] [--provider claude|codex|acp] [--title "…"] [--ttl-days N] [--json]
 pocket-start show <id> [--json]
 ```
 
@@ -148,6 +148,15 @@ pocket-start show <id> [--json]
 - Links live in `POCKET_DATA_DIR/starts.json`, at most 500, oldest dropped first.
 
 Use it for jobs that alert the user somewhere else, so acting on an alert is a tap: pair it with `pocket-notify --url` or `pocket-inbox add --url`.
+
+### Hand work to a fresh conversation
+
+When the user asks to hand off, or a conversation has grown long and the next step stands alone, write a briefing and run `pocket-start add --handoff --file <path> --title "…"`. Put the link alone on its own line in your reply: Pocket shows it as a card with Start and Review first.
+
+- The briefing is all the new conversation knows. Say what was decided, what is left, which files matter and what not to redo.
+- `--dir` defaults to the folder you run the command in, so run it from the folder the work belongs in.
+- Pocket works out which conversation you are from your runner token. You cannot name a parent or choose permissions; a handoff never gets more permission than your conversation has. OpenRouter conversations have no runner token, so their handoffs have no parent and get Review actions.
+- Never put a secret in a briefing: it is refused. Name the Vault entry instead.
 
 ### Send the user a notification
 
