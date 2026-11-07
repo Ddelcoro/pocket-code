@@ -15,13 +15,22 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { shellArg } from './skills.mjs';
 
-export const LIMITS = { entries: 500, text: 2000, title: 160, story: 120, source: 60, keepDays: 60, dismissedDays: 30 };
+// 1.95: a digest carries its items (one per story: title, text, story, Gmail thread, a `ref` the watcher knows), each with
+// its own decision: Alert me on this, Resolved, Not useful, and Restore to undo. Item decisions are feedback too
+// (kind 'digest-item', id '<entry>/<ref>'), so the watcher can promote a line to an alert, close a story or learn a rule
+// from one line of the digest instead of from the whole digest. A digest's text may run to digestText characters.
+export const LIMITS = { entries: 500, text: 2000, digestText: 12000, title: 160, story: 120, source: 60, items: 40, itemText: 1200, ref: 40, keepDays: 60, dismissedDays: 30 };
 export const KINDS = ['alert', 'digest', 'lookahead'];
 export const PRIORITIES = ['critical', 'high', 'normal', 'low'];
 export const STATES = ['new', 'opened', 'dismissed', 'resolved', 'not_useful'];
 export const ACTIONS = ['open', 'unread', 'dismiss', 'resolve', 'not_useful', 'restore'];
+export const SECTIONS = ['held', 'resolved', 'worth', 'tidied']; // where a digest item sat: held overnight, resolved overnight, worth knowing, taken off by the tidy pass
+export const ITEM_STATES = ['open', 'alerted', 'resolved', 'not_useful'];
+export const ITEM_ACTIONS = ['alert', 'resolve', 'not_useful', 'restore'];
 const ACTED = ['dismissed', 'resolved', 'not_useful'];
 const TARGET = { dismiss: 'dismissed', resolve: 'resolved', not_useful: 'not_useful' };
+const ITEM_TARGET = { alert: 'alerted', resolve: 'resolved', not_useful: 'not_useful', restore: 'open' };
+const ITEM_ACTED = ['alerted', 'resolved', 'not_useful'];
 const NOTE_MAX = 300, URL_MAX = 500, DEDUPE_MAX = 200, SESSIONS_MAX = 5, DAY = 86400_000;
 const DOC_RE = /^[0-9a-f]{12}$/, START_RE = /^[0-9a-f]{12}$/, SESSION_RE = /^(cx:)?[0-9A-Za-z][0-9A-Za-z_-]{7,79}$/;
 const checkSessions = v => Array.isArray(v) ? v.filter(s => s && SESSION_RE.test(String(s.id)) && !Number.isNaN(ms(s.at))).slice(-SESSIONS_MAX).map(s => ({ id: s.id, at: s.at })) : [];
@@ -38,6 +47,30 @@ const checkDoc = v => { const d = str(v, 40); if (!d) return ''; if (DOC_RE.test
 const pick = (v, list, fallback, what) => { const s = str(v, 40); if (!s) return fallback; if (list.includes(s)) return s; throw fail(`Unknown ${what}. Use ${list.join(', ')}.`, 400, { code: 'bad_' + what }); };
 const checkSince = v => { if (v == null || v === '') return null; const t = Date.parse(String(v)); if (Number.isNaN(t)) throw fail('since must be a date and time (ISO).', 400, { code: 'bad_since' }); return t; };
 const source = v => line(v, LIMITS.source) || 'inbox-monitor';
+const textMax = kind => kind === 'digest' ? LIMITS.digestText : LIMITS.text;
+// 1.95: a digest's items. `ref` is the watcher's handle (an alert id, say) and must be unique within the entry; a bad item is refused
+// on add (the watcher's call) and dropped on load (a file edited by hand).
+const REF_RE = /^[0-9A-Za-z][0-9A-Za-z:_.-]{0,39}$/;
+function checkItem(raw, i, { strict }) {
+  const bad = msg => fail(`Item ${i + 1}: ${msg}`, 400, { code: 'bad_item' });
+  if (!raw || typeof raw !== 'object') { if (strict) throw bad('not an item.'); return null; }
+  const ref = str(raw.ref, LIMITS.ref), title = line(raw.title, LIMITS.title);
+  if (!REF_RE.test(ref)) { if (strict) throw bad('ref is letters, digits, : _ . - (up to 40).'); return null; }
+  if (!title) { if (strict) throw bad('needs a title.'); return null; }
+  const keep = (f, v) => { try { return f(v); } catch (e) { if (strict) throw bad(e.message); return ''; } };
+  const ok = (v, list, d) => list.includes(v) ? v : d;
+  return { ref, section: strict ? pick(raw.section, SECTIONS, 'worth', 'section') : ok(raw.section, SECTIONS, 'worth'), title, text: str(raw.text, LIMITS.itemText), story: line(raw.story, LIMITS.story),
+    gmail: keep(checkGmail, raw.gmail), priority: strict ? pick(raw.priority, PRIORITIES, 'normal', 'priority') : ok(raw.priority, PRIORITIES, 'normal'),
+    state: ok(raw.state, ITEM_STATES, 'open'), actedAt: raw.actedAt || null, ackedAt: raw.ackedAt || null, note: str(raw.note, NOTE_MAX), lastAction: ITEM_ACTIONS.includes(raw.lastAction) ? raw.lastAction : null };
+}
+function checkItems(raw, { strict }) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) { if (strict) throw fail('items is a list.', 400, { code: 'bad_items' }); return []; }
+  if (raw.length > LIMITS.items) { if (strict) throw fail(`items: at most ${LIMITS.items}.`, 400, { code: 'bad_items' }); raw = raw.slice(0, LIMITS.items); }
+  const out = [], seen = new Set();
+  raw.forEach((r, i) => { const it = checkItem(r, i, { strict }); if (!it) return; if (seen.has(it.ref)) { if (strict) throw fail(`Item ${i + 1}: ref ${it.ref} is used twice.`, 400, { code: 'bad_item' }); return; } seen.add(it.ref); out.push(it); });
+  return out;
+}
 
 // ---- 1.70: Inbox Watch settings. The worker normalizes again; here a bad value is refused with a reason the owner can read.
 export const WATCH = { periods: 12, every: 240, name: 40, model: 80, profileBytes: 24000, reasoning: ['default', 'low', 'medium', 'high', 'xhigh', 'max'], firstPass: ['jev', 'openai', 'both'], tidyEvery: [1, 2, 4, 8, 12, 24], rules: 8000 };
@@ -143,11 +176,12 @@ export class InboxStore {
   normalize(e) {
     const ok = (v, list, d) => list.includes(v) ? v : d;
     const keep = (f, v) => { try { return f(v); } catch { return ''; } };
-    return { id: e.id, kind: ok(e.kind, KINDS, 'alert'), priority: ok(e.priority, PRIORITIES, 'normal'), title: line(e.title, LIMITS.title), text: str(e.text, LIMITS.text),
+    const kind = ok(e.kind, KINDS, 'alert');
+    return { id: e.id, kind, priority: ok(e.priority, PRIORITIES, 'normal'), title: line(e.title, LIMITS.title), text: str(e.text, textMax(kind)),
       story: line(e.story, LIMITS.story), source: source(e.source), url: keep(checkUrl, e.url), gmail: keep(checkGmail, e.gmail), doc: keep(checkDoc, e.doc), dedupe: str(e.dedupe, DEDUPE_MAX),
       state: ok(e.state, STATES, 'new'), at: e.at, seenAt: e.seenAt || null, actedAt: e.actedAt || null, ackedAt: e.ackedAt || null, note: str(e.note, NOTE_MAX),
       by: e.by === 'ui' ? 'ui' : 'cli', actedBy: e.actedBy === 'ui' || e.actedBy === 'cli' ? e.actedBy : null, revision: Number.isInteger(e.revision) && e.revision > 0 ? e.revision : 1, lastAction: typeof e.lastAction === 'string' ? e.lastAction : null,
-      sessions: checkSessions(e.sessions) };
+      sessions: checkSessions(e.sessions), items: checkItems(e.items, { strict: false }) };
   }
   save() { this.write(this.file, { version: 1, entries: this.entries, sources: this.sources, profiles: this.profiles, watch: this.watch, checks: this.checks }); }
   get(id) { const e = this.entries.find(x => x.id === id); if (!e) throw fail('That Inbox entry does not exist.', 404, { code: 'inbox_missing' }); return e; }
@@ -177,9 +211,10 @@ export class InboxStore {
     this.prune(now);
     const title = line(input.title, LIMITS.title);
     if (!title) throw fail('An Inbox entry needs a title.', 400, { code: 'no_title' });
-    const e = { id: shortId(), kind: pick(input.kind, KINDS, 'alert', 'kind'), priority: pick(input.priority, PRIORITIES, 'normal', 'priority'), title, text: str(input.text, LIMITS.text),
+    const kind = pick(input.kind, KINDS, 'alert', 'kind');
+    const e = { id: shortId(), kind, priority: pick(input.priority, PRIORITIES, 'normal', 'priority'), title, text: str(input.text, textMax(kind)),
       story: line(input.story, LIMITS.story), source: source(input.source), url: checkUrl(input.url), gmail: checkGmail(input.gmail), doc: checkDoc(input.doc), dedupe: str(input.dedupe, DEDUPE_MAX),
-      state: 'new', at: iso(now), seenAt: null, actedAt: null, ackedAt: null, note: '', by: actor === 'ui' ? 'ui' : 'cli', actedBy: null, revision: 1, lastAction: null, sessions: [] };
+      state: 'new', at: iso(now), seenAt: null, actedAt: null, ackedAt: null, note: '', by: actor === 'ui' ? 'ui' : 'cli', actedBy: null, revision: 1, lastAction: null, sessions: [], items: checkItems(input.items, { strict: true }) };
     if (e.dedupe) {
       const seen = this.entries.find(x => x.dedupe === e.dedupe && ms(x.at) >= now - DAY);
       if (seen) return { ...this.view(seen), duplicate: true };
@@ -201,8 +236,11 @@ export class InboxStore {
   // open marks it seen and unread takes that back; dismiss / resolve / not_useful record the owner's decision for the worker;
   // restore undoes one.
   // A repeat of what is already recorded changes nothing, so the worker never applies the same decision twice.
-  act({ action, id, note } = {}, { actor = 'ui' } = {}) {
+  // 1.95: with `item` (a digest item's ref) the decision is the item's: alert (promote it to an alert of its own), resolve,
+  // not_useful, or restore to undo. Deciding on an item also reads the entry.
+  act({ action, id, item, note } = {}, { actor = 'ui' } = {}) {
     const a = str(action, 40);
+    if (item != null && item !== '') return this.actItem({ action: a, id, item, note }, { actor });
     if (!ACTIONS.includes(a)) throw fail('Unknown action. Use open, unread, dismiss, resolve, not_useful or restore.', 400, { code: 'bad_action' });
     const e = this.get(str(id, 40));
     const at = iso(this.now()), n = typeof note === 'string' ? str(note, NOTE_MAX) : null;
@@ -218,6 +256,21 @@ export class InboxStore {
       const target = TARGET[a];
       if (e.state !== target || (n != null && n !== e.note)) { e.state = target; e.actedAt = at; e.ackedAt = null; e.lastAction = target; if (n != null) e.note = n; changed = true; }
     }
+    if (changed) { e.revision += 1; e.actedBy = actor === 'cli' ? 'cli' : 'ui'; this.save(); }
+    return this.view(e);
+  }
+  actItem({ action, id, item, note } = {}, { actor = 'ui' } = {}) {
+    if (!ITEM_ACTIONS.includes(action)) throw fail('Unknown item action. Use alert, resolve, not_useful or restore.', 400, { code: 'bad_action' });
+    const e = this.get(str(id, 40)), ref = str(item, LIMITS.ref);
+    const it = e.items.find(x => x.ref === ref);
+    if (!it) throw fail('That digest has no such item.', 404, { code: 'item_missing' });
+    const at = iso(this.now()), n = typeof note === 'string' ? str(note, NOTE_MAX) : null, target = ITEM_TARGET[action];
+    let changed = false;
+    if (action === 'restore') {
+      if (ITEM_ACTED.includes(it.state)) { it.state = 'open'; it.actedAt = at; it.ackedAt = null; it.lastAction = 'restore'; if (n != null) it.note = n; changed = true; }
+    } else if (it.state !== target || (n != null && n !== it.note)) { it.state = target; it.actedAt = at; it.ackedAt = null; it.lastAction = action; if (n != null) it.note = n; changed = true; }
+    if (e.state === 'new') { e.state = 'opened'; changed = true; }
+    if (!e.seenAt) { e.seenAt = at; changed = true; }
     if (changed) { e.revision += 1; e.actedBy = actor === 'cli' ? 'cli' : 'ui'; this.save(); }
     return this.view(e);
   }
@@ -241,18 +294,27 @@ export class InboxStore {
   }
 
   // The owner's decisions the worker has not applied yet, newest first.
+  // 1.95: a digest item's decision is listed too, as kind 'digest-item' with id '<entry>/<ref>', `entry`, `item` (the ref) and
+  // action 'alert', 'resolved', 'not_useful' or 'restore'; its title and story are the item's.
   feedback({ since } = {}) {
     const from = checkSince(since);
-    return this.entries.filter(e => e.actedAt && e.ackedAt == null && (ACTED.includes(e.state) || e.lastAction === 'restore') && (from == null || ms(e.actedAt) >= from))
-      .sort((a, b) => ms(b.actedAt) - ms(a.actedAt))
+    const out = this.entries.filter(e => e.actedAt && e.ackedAt == null && (ACTED.includes(e.state) || e.lastAction === 'restore') && (from == null || ms(e.actedAt) >= from))
       .map(e => ({ id: e.id, action: e.lastAction === 'restore' ? 'restore' : e.state, at: e.actedAt, note: e.note, title: e.title, story: e.story, source: e.source, kind: e.kind }));
+    for (const e of this.entries) for (const it of e.items) {
+      if (!it.actedAt || it.ackedAt != null || !(ITEM_ACTED.includes(it.state) || it.lastAction === 'restore') || (from != null && ms(it.actedAt) < from)) continue;
+      out.push({ id: `${e.id}/${it.ref}`, entry: e.id, item: it.ref, action: it.lastAction === 'restore' ? 'restore' : it.state === 'alerted' ? 'alert' : it.state, at: it.actedAt, note: it.note, title: it.title, story: it.story, source: e.source, kind: 'digest-item' });
+    }
+    return out.sort((a, b) => ms(b.at) - ms(a.at));
   }
-  // The worker applied these; they leave feedback until the owner decides again.
+  // The worker applied these; they leave feedback until the owner decides again. An item's id is '<entry>/<ref>'.
   ack(ids) {
-    if (!Array.isArray(ids) || ids.length > LIMITS.entries || ids.some(x => typeof x !== 'string')) throw fail('ids: a list of Inbox entry ids.', 400, { code: 'bad_ids' });
+    if (!Array.isArray(ids) || ids.length > LIMITS.entries * 4 || ids.some(x => typeof x !== 'string')) throw fail('ids: a list of Inbox entry ids.', 400, { code: 'bad_ids' });
     const want = new Set(ids), at = iso(this.now());
     let n = 0;
-    for (const e of this.entries) if (want.has(e.id) && e.actedAt && e.ackedAt == null) { e.ackedAt = at; n++; }
+    for (const e of this.entries) {
+      if (want.has(e.id) && e.actedAt && e.ackedAt == null) { e.ackedAt = at; n++; }
+      for (const it of e.items) if (want.has(`${e.id}/${it.ref}`) && it.actedAt && it.ackedAt == null) { it.ackedAt = at; n++; }
+    }
     if (n) this.save();
     return n;
   }

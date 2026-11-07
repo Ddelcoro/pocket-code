@@ -3,6 +3,16 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.95.0] — 2026-11-07 · build 188
+
+Requested by Damon (2026-11-07): a RingCentral text from a client was judged a digest line, so it never appeared in his Pocket Inbox on its own; when he opened the morning digest it read as one paragraph, and there was nothing he could press on any line to say "this should have been an alert".
+
+- **The digest reads as items.** `inboxText` (public/inbox.js) renders headings, bullets and paragraphs as blocks (`.inbox-h`, `ul`/`li`, `p`) with room between them instead of `<br>`-joined lines; `.inbox-body` is no longer `pre-wrap`. A digest's text may now run to 12,000 characters (`LIMITS.digestText`); alerts keep 2,000, so yesterday's digest is no longer cut off mid-item.
+- **Each line has its own choices.** The watcher's `send_digest` (engine.py) sends the digest's lines as `items` beside the text: `{ref, section, title, text, story, gmail, priority}`, `ref` `a<alert id>` (or `t<tidy id>` for a tidied line), `section` held · resolved · worth · tidied. `PocketPush._add` passes them with `--items <file>`; `pocket-inbox add --items <path|->`. `InboxStore` checks and keeps them (`checkItems`, at most 40, each text ≤ 1,200), `act({item})` records an item's decision (`alert`, `resolve`, `not_useful`, `restore`), and `feedback()` lists item decisions as kind `digest-item` with id `<entry>/<ref>` (`ack` takes those ids). The sheet shows the items as cards under their section headings with **Alert me**, **Resolved**, **Not useful**, **Gmail** and **Undo**; `pocket-inbox show` prints each item's ref and `act <id> <action> --item <ref>` decides one.
+- **Alert me promotes the line.** `apply_item_feedback` (engine.py) queues a `notify` copy of the digested alert (dedupe `escalate:<id>:<at>`) and delivers it at once, whatever quiet hours say; lifts a low story to normal; and records an `escalated` lesson, which `learn` (prompts/learn.md) treats like a hand-added Gmail label: a rule to alert on that kind of mail. `resolve` closes the story, `not_useful` is the lesson an alert's is, `restore` reopens; a tidied line (no alert behind it) is acked and sends nothing. `apply_feedback(store, dry_run)` now takes `dry_run` so a `tick --dry-run` never sends.
+- Manual: *A digest's items* under Inbox Watch, the decisions table, *Learning from your choices*; skill `pocket-inbox` (`act --item`).
+- Tests: `inbox.test.mjs` (items checked on add, kept on reload, decided one at a time, digest-item feedback and ack, the 12,000-character digest text); `inbox-watch/tests/test_digest_items.py` (the digest carries its items; Alert me sends now, lifts the story and is an `escalated` lesson, and does not send twice; resolve, not useful and restore on an item; a tidied line sends nothing).
+
 ## [1.94.0] — 2026-11-04 · build 187
 
 Requested by Damon (email, 2026-11-04, built at Brad's direction): he pins and unpins conversations often, and Pin sat near the bottom of the ⋯ menu.

@@ -263,7 +263,7 @@ def test_check_now_skips_quiet_hours():
         changed_threads = staticmethod(lambda c: ([], "2", False))
         baseline_threads = staticmethod(lambda q=None: [])
     try:
-        E.apply_feedback = E.sync_memory = E.heartbeat = lambda s: None
+        E.apply_feedback = E.sync_memory = E.heartbeat = lambda s, *a: None
         E.gmail_client = lambda: G()
         E.label_sync = lambda *a, **k: set()
         E.process = lambda *a, **k: seen.update(k) or (0, 0, None)

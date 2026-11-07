@@ -1435,18 +1435,30 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
 
     resolved = [a for a in overflow if is_resolved(a)]
     still = [a for a in overflow if not is_resolved(a)]
+    first = lambda t: (t or "").strip().splitlines()[0] if (t or "").strip() else ""  # noqa: E731
+
+    def item(a, section: str, text: str) -> dict:
+        """1.95: the line as data for Pocket, where each gets its own choices; `ref` a<alert id> is what its feedback names."""
+        return {"ref": f"a{a['id']}", "section": section, "title": a["subject"] or "", "text": text, "story": a["issue_key"] or "",
+                "gmail": GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else "", "priority": a["priority"] or "normal"}
     lines: list[str] = []
+    items: list[dict] = []
     if still:
-        lines += [f"## Also held overnight ({len(still)})"] + [f"- {a['subject'] or ''}: {(a['text'] or '').splitlines()[0]}" for a in still]
+        lines += [f"## Also held overnight ({len(still)})"] + [f"- {a['subject'] or ''}: {first(a['text'])}" for a in still]
+        items += [item(a, "held", first(a["text"])) for a in still]
     if resolved:
-        lines += [f"## Came up overnight and already resolved ({len(resolved)})"] + [f"- {a['subject'] or ''}: {(a['text'] or '').splitlines()[0]}" for a in resolved]
+        lines += [f"## Came up overnight and already resolved ({len(resolved)})"] + [f"- {a['subject'] or ''}: {first(a['text'])}" for a in resolved]
+        items += [item(a, "resolved", first(a["text"])) for a in resolved]
     if digest_items:
         lines += ["## Worth knowing"] + [f"- {a['subject'] or ''}: {a['text'] or ''}" for a in digest_items]
-    tidied = store.db.execute("select title, verdict from tidy_log where acted=1 and at>=? order by id", (since,)).fetchall()
+        items += [item(a, "worth", a["text"] or "") for a in digest_items]
+    tidied = store.db.execute("select id, title, verdict, issue_key from tidy_log where acted=1 and at>=? order by id", (since,)).fetchall()
     if tidied:
         res = [t["title"] for t in tidied if t["verdict"] == "resolved"]
         han = [t["title"] for t in tidied if t["verdict"] == "handled"]
         lines += [f"## Taken off your Inbox ({len(tidied)})"] + ([f"- Resolved: {', '.join(res)}"] if res else []) + ([f"- Handled, still followed: {', '.join(han)}"] if han else [])
+        items += [{"ref": f"t{t['id']}", "section": "tidied", "title": t["title"] or "", "text": "Resolved" if t["verdict"] == "resolved" else "Handled, still followed",
+                   "story": t["issue_key"] or "", "gmail": "", "priority": "normal"} for t in tidied]
     lines += [f"Ignored since the last digest: {ignored} threads. Reply if something should have reached you."]
     text = "\n".join(lines)
     if overflow or digest_items or ignored:
@@ -1460,7 +1472,7 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
             refs = []
             for d in DELIVERIES:
                 try:
-                    refs.append(f"{d.kind}:{d.send_digest(title, text)}")
+                    refs.append(f"{d.kind}:{d.send_digest(title, text, items=items)}")
                 except Exception as ex:  # noqa: BLE001
                     log(f"digest {d.kind} failed: {ex}")
             if DELIVERIES and not refs:
@@ -2056,9 +2068,58 @@ def _process_batch(store: Store, archive: Archive, gmail: Gmail, run_id: int, ba
 FEEDBACK_ACTIONS = {"resolved": "resolve", "dismissed": "dismiss", "not useful": "not_useful"}
 
 
-def apply_feedback(store: Store) -> None:
+def digest_item_alert(store: Store, ref: str) -> sqlite3.Row | None:
+    """The alert row behind a digest item's ref ("a<id>", send_digest's item()); a tidy line ("t<id>") has none."""
+    m = re.fullmatch(r"a(\d+)", ref or "")
+    return store.db.execute("select * from alerts where id=?", (int(m.group(1)),)).fetchone() if m else None
+
+
+def apply_item_feedback(store: Store, it: dict, dry_run: bool) -> None:
+    """1.95: a decision on one line of the morning digest in Pocket (feedback kind 'digest-item'). Alert me sends that story as an
+    alert of its own now (the owner is up and asking, so quiet hours do not hold it), lifts a low story to normal and is a lesson
+    the next learn turn turns into a rule; Resolved closes the story; Not useful is the lesson an alert's Not useful is; Restore
+    reopens a story Resolved had closed."""
+    ref, action = str(it.get("item") or ""), FEEDBACK_ACTIONS.get(it.get("action"), it.get("action"))
+    a = digest_item_alert(store, ref)
+    key = (a["issue_key"] if a and a["issue_key"] else "") or (it.get("story") or "")
+    title = ((it.get("title") or "") or (a["subject"] if a else "") or "")[:120]
+    when = iso_to_et(it.get("at")) or now_et().strftime("%a %b %-d")
+    note = (it.get("note") or "")[:300]
+    story = store.story(key) if key else None
+    if action == "alert":
+        if not a:
+            log(f"feedback alert on digest item {ref!r}: no alert behind it; nothing to send")
+            return
+        new_id = store.queue_alert(f"escalate:{a['id']}:{it.get('at') or iso()}", issue_key=a["issue_key"], thread_id=a["thread_id"], kind="notify",
+                                   priority=a["priority"] if a["priority"] in ("high", "critical") else "normal", text=a["text"], next_step=a["next_step"],
+                                   subject=a["subject"], sender=a["sender"], status="queued")
+        if new_id:
+            deliver(store, new_id, None, dry_run)
+        if story:
+            if story["priority"] == "low":
+                store.db.execute("update issues set priority='normal', updated_at=? where issue_key=?", (iso(), key))
+            store.add_event(key, "feedback", f"{OWNER} asked for an alert on this from the morning digest in Pocket ({when}).", [])
+        add_lesson(store, f"escalated:{it['id']}", "escalated", a["thread_id"], key or None, title, a["sender"] or "", a["subject"] or title,
+                   "", f"digest line: {clip(a['text'], 400)}", note)
+    elif action == "resolve" and story:
+        store.db.execute("update issues set status='resolved', updated_at=? where issue_key=?", (iso(), key))
+        store.add_event(key, "feedback", f"{OWNER} marked this resolved from the morning digest in Pocket ({when}).", [])
+    elif action == "not_useful":
+        add_lesson(store, f"not_useful:{it['id']}", "not_useful", a["thread_id"] if a else None, key or None, title, a["sender"] if a else "",
+                   a["subject"] if a else title, "", f"digest line: {clip(a['text'], 400)}" if a else "digest line", note)
+        if story:
+            store.db.execute("update issues set priority='low', updated_at=? where issue_key=?", (iso(), key))
+            store.add_event(key, "feedback", f"{OWNER} marked a digest line on this story not useful in Pocket ({when}).", [])
+    elif action == "restore" and story and story["status"] == "resolved":
+        store.db.execute("update issues set status='open', updated_at=? where issue_key=?", (iso(), key))
+        store.add_event(key, "feedback", f"{OWNER} restored this in Pocket ({when}).", [])
+    log(f"feedback {action} on digest item {ref!r}: {title!r} story={key or '-'}")
+
+
+def apply_feedback(store: Store, dry_run: bool = False) -> None:
     """What the owner did with earlier alerts in Pocket (1.69 Inbox): Resolved closes the story, Not useful becomes a line
-    in the preferences file the judge reads every turn and drops the story to low, Restore reopens; Dismiss changes nothing."""
+    in the preferences file the judge reads every turn and drops the story to low, Restore reopens; Dismiss changes nothing.
+    1.95: a decision on one digest item (kind 'digest-item') goes to apply_item_feedback."""
     for d in DELIVERIES:
         if not hasattr(d, "feedback"):
             continue
@@ -2071,6 +2132,13 @@ def apply_feedback(store: Store) -> None:
         own = {r[0] for r in store.db.execute("select entry_id from tidy_log where acted=1")}
         for it in items:
             if it.get("id") in own:  # the tidy pass made this decision and already applied it to the story
+                done.append(it["id"])
+                continue
+            if it.get("kind") == "digest-item":
+                try:
+                    apply_item_feedback(store, it, dry_run)
+                except Exception as ex:  # noqa: BLE001
+                    log(f"feedback on digest item {it.get('id')!r} failed: {ex}")
                 done.append(it["id"])
                 continue
             key, title = it.get("story") or "", (it.get("title") or "")[:120]
@@ -2462,7 +2530,7 @@ def learn(store: Store, dry_run: bool = False) -> int:
     while rules and sum(len(r) + 3 for r in rules) > room:
         rules.pop()
     changes = [clip(str(c), 200) for c in (data.get("changes") or []) if isinstance(c, str)]
-    section = (f"{LEARNED_HEADER.format(owner=OWNER)}\nWritten by the watcher from what {OWNER} labelled in Gmail and marked Not useful "
+    section = (f"{LEARNED_HEADER.format(owner=OWNER)}\nWritten by the watcher from what {OWNER} labelled in Gmail, asked to be alerted on from a digest, and marked Not useful "
                f"in Pocket. Edit or delete any line.\n" + "".join(f"- {r}\n" for r in rules))
     text = owner_rules.rstrip() + "\n\n" + section
     if dry_run:
@@ -2658,7 +2726,7 @@ def run(dry_run: bool, baseline_only: bool, why: str = "", request: str | None =
     changed_n = evaluated = notified = 0
     error = None
     try:
-        apply_feedback(store)
+        apply_feedback(store, dry_run)
         learn_safely(store, dry_run)
         cursor = store.get("history_cursor")
         if cursor and not gmail.cursor_ok(cursor):

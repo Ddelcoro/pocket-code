@@ -1895,6 +1895,32 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 .inbox-runner { margin-top: 8px; }
 .inbox-body { font-size: 15.5px; line-height: 1.55; overflow-wrap: anywhere; }
 .inbox-body a { color: var(--clay); }
+/* 1.95: the text as blocks (a heading, bullets with room between them, paragraphs) instead of one run of line breaks, and a
+   digest's items as cards, each with its own choices (Alert me, Resolved, Not useful, Gmail). Asked for by Damon. */
+.inbox-body { white-space: normal; }
+.inbox-body p { margin: 0 0 8px; }
+.inbox-body p:last-child, .inbox-body ul:last-child { margin-bottom: 0; }
+.inbox-body .inbox-h { margin: 12px 0 6px; font-size: 12.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--dim); }
+.inbox-body .inbox-h:first-child { margin-top: 0; }
+.inbox-body ul { margin: 0 0 8px; padding-left: 20px; }
+.inbox-body li { margin: 0 0 10px; }
+.inbox-body li:last-child { margin-bottom: 0; }
+.inbox-items-wrap { margin: 0 14px 12px; }
+.inbox-items h3 { margin: 14px 0 6px; font-size: 12.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--dim); }
+.inbox-items:first-child h3 { margin-top: 0; }
+.inbox-items h3 span { font-weight: 400; margin-left: 4px; }
+.inbox-item-card { padding: 12px 12px 10px; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.inbox-item-card h4 { margin: 0 0 6px; font-size: 15.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.inbox-item-card .inbox-body { font-size: 14.5px; line-height: 1.5; }
+.inbox-item-facts { margin: 6px 0 0; font-size: 13px; color: var(--dim); }
+.inbox-item-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.inbox-item-actions:empty { display: none; }
+.inbox-item-actions .chip { min-height: 36px; padding: 4px 10px; font-size: 13.5px; text-decoration: none; gap: 5px; }
+.inbox-item-actions .chip .i { width: 16px; height: 16px; }
+.inbox-item-alert { color: var(--clay); border-color: var(--clay); }
+.inbox-item-state { font-size: 13.5px; font-weight: 600; color: var(--clay); margin-right: 4px; }
+.inbox-item-card.state-resolved, .inbox-item-card.state-not_useful { opacity: .72; }
+.inbox-rest { margin-top: 10px; color: var(--dim); font-size: 13.5px; }
 .inbox-card .home-card-what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 1.70: Inbox Watch settings. The 1.67 settings blocks (set head, lead, router-level rows), with periods as rows of
    day chips and times, and a plain table of what each day cost. No new colour; the pressed day uses the filter-chip clay. */

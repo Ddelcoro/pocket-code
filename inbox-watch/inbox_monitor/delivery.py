@@ -19,6 +19,7 @@ import html as htmlmod
 import json
 import os
 import re
+import tempfile
 import smtplib
 import subprocess
 import urllib.parse
@@ -103,7 +104,9 @@ class Delivery:
     def send_alert(self, alert: dict, *, pocket_url: str | None, held_note: bool = False) -> str | None:
         raise NotImplementedError
 
-    def send_digest(self, title: str, text: str) -> str | None:
+    def send_digest(self, title: str, text: str, items: list[dict] | None = None) -> str | None:
+        """`items` (1.95): the digest's lines as data, [{ref, section, title, text, story, gmail, priority}], for a channel that can
+        offer a choice per line (Pocket). Telegram and email render the text and ignore them."""
         raise NotImplementedError
 
     def send_lookahead(self, alert: dict, *, pocket_url: str | None) -> str | None:
@@ -159,7 +162,7 @@ class Telegram(Delivery):
             mid = self._send(chunk, buttons) or mid
         return mid
 
-    def send_digest(self, title: str, text: str) -> str | None:
+    def send_digest(self, title: str, text: str, items: list[dict] | None = None) -> str | None:
         lines = [f"<b>{htmlmod.escape(title)}</b>", ""] + [cite_html(l) if not l.startswith("## ") else f"<b>{htmlmod.escape(l[3:])}</b>"
                                                             for l in text.split("\n")]
         mid = None
@@ -201,7 +204,7 @@ class PocketPush(Delivery):
 
     # ---- Pocket 1.69+: the Inbox library
     def _add(self, kind: str, title: str, text: str, *, priority: str = "normal", story: str = "", url: str | None = None,
-             gmail: str | None = None, doc: str | None = None, dedupe: str | None = None) -> str:
+             gmail: str | None = None, doc: str | None = None, dedupe: str | None = None, items: list[dict] | None = None) -> str:
         args = ["add", "--title", title[:160], "--file", "-", "--kind", kind, "--priority", priority or "normal", "--source", self.source, "--json"]
         if story:
             args += ["--story", story[:120]]
@@ -215,6 +218,12 @@ class PocketPush(Delivery):
             args += ["--dedupe", dedupe[:120]]
         if self.email:
             args.append("--email")
+        items_file = None
+        if items:  # 1.95: a digest's items go in a file beside the text (stdin carries the text); an older Pocket ignores the option
+            items_file = tempfile.NamedTemporaryFile("w", suffix=".json", prefix="pocket-inbox-items-", delete=False)
+            json.dump(items[:40], items_file)
+            items_file.close()
+            args += ["--items", items_file.name]
         try:
             d = self._json(self._node("pocket-inbox.mjs", args, stdin=text), "pocket-inbox add")
         except RuntimeError as ex:
@@ -223,6 +232,12 @@ class PocketPush(Delivery):
                 self.inbox = False
                 return None
             raise
+        finally:
+            if items_file:
+                try:
+                    os.unlink(items_file.name)
+                except OSError:
+                    pass
         d = d if isinstance(d, dict) else {}
         return f"inbox={d.get('entry', {}).get('id', '?')} push={d.get('push')} mail={d.get('mail')}"
 
@@ -310,11 +325,11 @@ class PocketPush(Delivery):
                 return ref
         return self._push(title, cite_plain(text)[:1800], pocket_url, alert.get("dedupe_key") or title)
 
-    def send_digest(self, title: str, text: str) -> str | None:
+    def send_digest(self, title: str, text: str, items: list[dict] | None = None) -> str | None:
         md = f"# {title}\n\n" + cite_markdown(text).replace("\n## ", "\n\n## ")
         doc = self._keep(title, md, f"digest-{dt.datetime.now().strftime('%Y-%m-%d-%H%M')}.md")
         if self.inbox:
-            ref = self._add("digest", title, text, doc=doc, dedupe=f"digest|{dt.datetime.now().date()}")
+            ref = self._add("digest", title, text, doc=doc, dedupe=f"digest|{dt.datetime.now().date()}", items=items)
             if ref:
                 return ref
         first = next((l for l in text.split("\n") if l.strip() and not l.startswith("## ")), "")
@@ -379,7 +394,7 @@ class Email(Delivery):
             html = "<p><i>Held overnight.</i></p>" + html
         return self._send(("[Alert] " if alert.get("priority") in ("critical", "high") else "") + subject, text + ("\n\n" + pocket_url if pocket_url else ""), html)
 
-    def send_digest(self, title: str, text: str) -> str | None:
+    def send_digest(self, title: str, text: str, items: list[dict] | None = None) -> str | None:
         html = "".join(f"<h3>{htmlmod.escape(l[3:])}</h3>" if l.startswith("## ") else f"<p>{cite_html(l)}</p>" for l in text.split("\n") if l.strip())
         return self._send(title, cite_plain(text), html)
 

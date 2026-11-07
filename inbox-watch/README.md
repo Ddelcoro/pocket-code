@@ -69,7 +69,7 @@ connector reads. `python3 -m inbox_monitor.mail_connector whoami` prints it as J
 
 | `delivery.kind` | Alerts | Digest and look-ahead |
 |---|---|---|
-| `pocket` | a push whose tap opens the briefed session (Pocket Code 1.58.1+) | kept in Files, the push links there |
+| `pocket` | a push whose tap opens the briefed session (Pocket Code 1.58.1+) | kept in Files, the push links there; with Pocket 1.95+ the digest's lines are Inbox items too, each with Alert me / Resolved / Not useful, whose decisions come back through `feedback()` as kind `digest-item` |
 | `telegram` | a bot DM with Open in Pocket Code / Open in Gmail buttons | one message |
 | `email` | HTML mail with the same links | HTML mail |
 

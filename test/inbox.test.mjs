@@ -17,7 +17,7 @@ const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'pocket-inbox-'));
 const DAY=86400000,GMAIL='https://mail.google.com/mail/u/0/#all/19a2b3c4d5e6f708';
 
 test('InboxStore: the contract, normalizing input, limits and the instructions line',()=>{
-  assert.deepEqual(LIMITS,{entries:500,text:2000,title:160,story:120,source:60,keepDays:60,dismissedDays:30});
+  assert.deepEqual(LIMITS,{entries:500,text:2000,digestText:12000,title:160,story:120,source:60,items:40,itemText:1200,ref:40,keepDays:60,dismissedDays:30});
   assert.deepEqual(KINDS,['alert','digest','lookahead']);assert.deepEqual(PRIORITIES,['critical','high','normal','low']);
   assert.deepEqual(STATES,['new','opened','dismissed','resolved','not_useful']);assert.deepEqual(ACTIONS,['open','unread','dismiss','resolve','not_useful','restore']);
   const dir=tmp(),file=path.join(dir,'inbox.json');const clock=Date.parse('2026-10-19T12:00:00Z');
@@ -336,4 +336,46 @@ test('HTTP: Inbox is off until Settings turns it on; token and cookie, tunnel re
   assert.equal((await call('/settings',{inbox:false})).body.inbox,false);
   out=await cli(['list']);assert.equal(out.code,1);assert.match(out.stderr,/Inbox Watch is off/);
   assert.equal((await call('/inbox')).status,404);
+});
+
+// 1.95: a digest's items, each with its own decision (alert, resolve, not_useful, restore) that reaches the watcher as feedback.
+test('InboxStore: digest items are checked on add, kept on reload, decided one at a time and reported as digest-item feedback',()=>{
+  const dir=tmp(),file=path.join(dir,'inbox.json');let clock=Date.parse('2026-11-07T13:00:00Z');
+  const s=new InboxStore(file,{now:()=>clock});
+  const items=[{ref:'a317',section:'worth',title:'Roslynn website feedback and review',text:'Roslynn texted that business is up 25%. [Text](msg:1a1b398659576b53)',story:'roslynn-website-feedback',gmail:GMAIL,priority:'low'},
+    {ref:'a296',section:'held',title:'Wireless Experts Google Ads keywords',text:'Steve asked for a keyword review.',story:'wireless-experts-google-ads-keywords'},
+    {ref:'t12',section:'tidied',title:'Polo launch',text:'Resolved'}];
+  const d=s.add({kind:'digest',title:'Morning email digest — Sat Nov 7',text:'## Worth knowing\n- Roslynn website feedback and review: business is up.\nIgnored since the last digest: 9 threads.',items,dedupe:'digest|2026-11-07'});
+  assert.equal(d.items.length,3);assert.deepEqual(d.items[0],{ref:'a317',section:'worth',title:'Roslynn website feedback and review',text:items[0].text,story:'roslynn-website-feedback',gmail:GMAIL,priority:'low',state:'open',actedAt:null,ackedAt:null,note:'',lastAction:null});
+  assert.deepEqual([d.items[1].priority,d.items[1].gmail,d.items[2].section],['normal','','tidied'],'defaults');
+  assert.equal(s.add({kind:'alert',title:'plain'}).items.length,0,'an alert has no items');
+  assert.throws(()=>s.add({title:'x',items:'nope'}),e=>e.code==='bad_items');
+  assert.throws(()=>s.add({title:'x',items:[{ref:'a1',title:'one'},{ref:'a1',title:'two'}]}),e=>e.code==='bad_item'&&/used twice/.test(e.message));
+  assert.throws(()=>s.add({title:'x',items:[{ref:'bad ref',title:'one'}]}),e=>e.code==='bad_item');
+  assert.throws(()=>s.add({title:'x',items:[{ref:'a1'}]}),e=>e.code==='bad_item'&&/title/.test(e.message));
+  assert.throws(()=>s.add({title:'x',items:[{ref:'a1',title:'t',section:'misc'}]}),e=>e.code==='bad_section');
+  assert.throws(()=>s.add({title:'x',items:[{ref:'a1',title:'t',gmail:'https://evil.example/'}]}),e=>e.code==='bad_item');
+  assert.throws(()=>s.add({title:'x',items:Array.from({length:41},(_,i)=>({ref:'a'+i,title:'t'}))}),e=>e.code==='bad_items');
+  // A digest's text may run long; an alert's is still cut at 2000.
+  assert.equal(s.add({kind:'digest',title:'long',text:'x'.repeat(13000)}).text.length,LIMITS.digestText);assert.equal(s.add({title:'long alert',text:'x'.repeat(13000)}).text.length,LIMITS.text);
+  // Deciding on an item reads the entry, records the decision on the item and is feedback of kind digest-item with id <entry>/<ref>.
+  clock+=1000;let r=s.act({action:'alert',id:d.id,item:'a317'});
+  assert.deepEqual([r.state,r.seenAt,r.revision,r.items[0].state,r.items[0].actedAt,r.items[0].lastAction],['opened','2026-11-07T13:00:01Z',2,'alerted','2026-11-07T13:00:01Z','alert']);
+  assert.equal(s.act({action:'alert',id:d.id,item:'a317'}).revision,2,'the same decision twice is one decision');
+  clock+=1000;r=s.act({action:'not_useful',id:d.id,item:'a296',note:'Steve texts me anyway'});assert.deepEqual([r.items[1].state,r.items[1].note],['not_useful','Steve texts me anyway']);
+  assert.throws(()=>s.act({action:'dismiss',id:d.id,item:'a317'}),e=>e.code==='bad_action');assert.throws(()=>s.act({action:'alert',id:d.id,item:'a999'}),e=>e.status===404&&e.code==='item_missing');
+  let fb=s.feedback();
+  assert.deepEqual(fb.map(f=>f.id),[`${d.id}/a296`,`${d.id}/a317`],'newest first, the entry itself undecided');
+  assert.deepEqual(fb[1],{id:`${d.id}/a317`,entry:d.id,item:'a317',action:'alert',at:'2026-11-07T13:00:01Z',note:'',title:'Roslynn website feedback and review',story:'roslynn-website-feedback',source:'inbox-monitor',kind:'digest-item'});
+  assert.equal(fb[0].action,'not_useful');
+  assert.equal(s.ack([`${d.id}/a317`,d.id,'nope']),1,'the item is acked, the undecided entry is not');assert.deepEqual(s.feedback().map(f=>f.id),[`${d.id}/a296`]);
+  // Restore undoes the item's decision and is feedback again; the entry's own decisions still work beside the items'.
+  clock+=1000;r=s.act({action:'restore',id:d.id,item:'a317'});assert.deepEqual([r.items[0].state,r.items[0].lastAction,r.items[0].ackedAt],['open','restore',null]);
+  assert.deepEqual(s.feedback().map(f=>[f.id,f.action]),[[`${d.id}/a317`,'restore'],[`${d.id}/a296`,'not_useful']]);
+  clock+=1000;s.act({action:'dismiss',id:d.id});assert.deepEqual(s.feedback().map(f=>f.id),[d.id,`${d.id}/a317`,`${d.id}/a296`]);
+  assert.equal(s.ack([d.id,`${d.id}/a317`,`${d.id}/a296`]),3);assert.deepEqual(s.feedback(),[]);
+  // Reload: items come back; a hand-edited bad item is dropped, not fatal.
+  const raw=JSON.parse(fs.readFileSync(file,'utf8'));raw.entries[0].items.push({ref:'bad ref',title:'x'},{ref:'a317',title:'dup'});fs.writeFileSync(file,JSON.stringify(raw));
+  const s2=new InboxStore(file,{now:()=>clock});const e2=s2.get(d.id);
+  assert.deepEqual(e2.items.map(i=>[i.ref,i.state]),[['a317','open'],['a296','not_useful'],['t12','open']]);
 });

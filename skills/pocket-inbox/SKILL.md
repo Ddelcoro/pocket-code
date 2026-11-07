@@ -55,6 +55,15 @@ pocket-inbox act <id> dismiss
 pocket-inbox act <id> restore
 ```
 
+A digest's lines are items with a `ref` each (`show` prints them, as `[a317]`). A decision can land on one item instead of
+the whole digest: **Alert me** (`alert`) has the watcher send that story as an alert of its own now and learn to alert on
+that kind of mail; `resolve` and `not_useful` act on that story alone; `restore` takes any of them back.
+
+```bash
+pocket-inbox act <id> alert --item a317
+pocket-inbox act <id> not_useful --item a296 --note "Steve texts me anyway"
+```
+
 **Act only when the user asks**, in words that name the decision: "mark the Northside alert
 resolved", "that one wasn't useful", "dismiss the look-ahead", "bring back the Acme HOA alert".
 Never resolve, dismiss or mark anything not useful on your own judgment, even when the

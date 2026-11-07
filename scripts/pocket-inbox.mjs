@@ -5,10 +5,12 @@
 //
 //   pocket-inbox add --title "…" (--text "…" | --file <path|->) [--kind alert|digest|lookahead] [--priority critical|high|normal|low]
 //                    [--story "…"] [--source "…"] [--url </#/start/<id> or a web address>] [--gmail <https://mail.google.com/…>]
-//                    [--doc <Files id>] [--dedupe <key>] [--email] [--no-push] [--json]      prints "<id> push=<devices|off> mail=<yes|no|off|failed>"
+//                    [--doc <Files id>] [--dedupe <key>] [--items <path|->] [--email] [--no-push] [--json]      prints "<id> push=<devices|off> mail=<yes|no|off|failed>"
+//                    --items (1.95): a digest's items as JSON, [{ref, section, title, text, story, gmail, priority}]
 //   pocket-inbox list [--state new|all|dismissed] [--since <ISO>] [--json]                   new ones by default, newest first
 //   pocket-inbox show <id> [--json]
 //   pocket-inbox act <id> <open|unread|dismiss|resolve|not_useful|restore> [--note "…"] [--json]
+//   pocket-inbox act <id> <alert|resolve|not_useful|restore> --item <ref> [--note "…"]       one item of a digest (1.95)
 //   pocket-inbox feedback [--since <ISO>] [--json]                                           the owner's decisions not yet applied
 //   pocket-inbox ack <id…>                                                                   the worker applied them
 //   pocket-inbox seen [--source <name>] [--profile <path|->]                                 a heartbeat: the worker ran (1.70: with its profile)
@@ -66,7 +68,18 @@ function card(e) {
   const lines = [line(e)];
   if (e.story) lines.push(`  Story: ${e.story}`);
   lines.push(`  From: ${e.source}`);
-  if (e.text) lines.push('  ' + plain(e.text).split('\n').join('\n  '));
+  if (Array.isArray(e.items) && e.items.length) { // 1.95: a digest's items, with the ref `act --item` takes
+    const SECTION = { held: 'Held overnight', resolved: 'Came up overnight and already resolved', worth: 'Worth knowing', tidied: 'Taken off your Inbox' };
+    const ITEM = { alerted: 'alert requested', resolved: 'resolved', not_useful: 'not useful' };
+    let sec = '';
+    for (const it of e.items) {
+      if (it.section !== sec) { sec = it.section; lines.push(`  ${SECTION[sec] || sec}:`); }
+      lines.push(`  - ${it.title}  [${it.ref}]${it.state !== 'open' ? ' · ' + (ITEM[it.state] || it.state) : ''}${it.story ? '  story: ' + it.story : ''}`);
+      if (it.text) lines.push('      ' + plain(it.text).split('\n').join('\n      '));
+    }
+    const rest = plain(e.text).split('\n').filter(l => l.trim() && !l.startsWith('## ') && !l.startsWith('- '));
+    if (rest.length) lines.push('  ' + rest.join('\n  '));
+  } else if (e.text) lines.push('  ' + plain(e.text).split('\n').join('\n  '));
   if (e.url) lines.push(`  Open: ${e.url}`);
   if (e.gmail) lines.push(`  Gmail: ${e.gmail}`);
   if (e.doc) lines.push(`  File: ${e.doc}`);
@@ -84,8 +97,13 @@ switch (cmd) {
     let text = opts.text;
     if (opts.file !== undefined) { try { text = opts.file === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(opts.file, 'utf8'); } catch (e) { die(`Could not read ${opts.file}: ${e.message}`); } }
     if (text === undefined) die('add needs --text "…" or --file <path|->');
+    let items;
+    if (opts.items !== undefined) { // 1.95: a digest's items; "-" reads stdin only when the text did not
+      try { items = JSON.parse(opts.items === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(opts.items, 'utf8')); } catch (e) { die(`Could not read the items: ${e.message}`); }
+      if (!Array.isArray(items)) die('--items must be a JSON list of items');
+    }
     const r = await call('/api/inbox', { title, text: String(text).trim(), kind: opts.kind || undefined, priority: opts.priority || undefined, story: opts.story || '', source: opts.source || undefined,
-      url: opts.url || '', gmail: opts.gmail || '', doc: opts.doc || '', dedupe: opts.dedupe || '', email: Boolean(opts.email), push: !opts.noPush });
+      url: opts.url || '', gmail: opts.gmail || '', doc: opts.doc || '', dedupe: opts.dedupe || '', email: Boolean(opts.email), push: !opts.noPush, ...(items ? { items } : {}) });
     out(r, `${r.entry.id} push=${r.push ?? 'off'} mail=${mailWord(r.mail)}${r.duplicate ? ' duplicate' : ''}`);
     break;
   }
@@ -106,7 +124,7 @@ switch (cmd) {
   case 'act': {
     const [id, action] = rest;
     if (!id || !action) die('act needs an entry id and an action: pocket-inbox act <id> resolve');
-    const r = await call('/api/inbox/act', { action, id, ...(opts.note !== undefined ? { note: opts.note } : {}) });
+    const r = await call('/api/inbox/act', { action, id, ...(opts.item ? { item: opts.item } : {}), ...(opts.note !== undefined ? { note: opts.note } : {}) });
     out(r.entry, card(r.entry)); break;
   }
   case 'feedback': {
