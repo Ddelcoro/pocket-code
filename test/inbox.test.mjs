@@ -342,12 +342,13 @@ test('HTTP: Inbox is off until Settings turns it on; token and cookie, tunnel re
 test('InboxStore: digest items are checked on add, kept on reload, decided one at a time and reported as digest-item feedback',()=>{
   const dir=tmp(),file=path.join(dir,'inbox.json');let clock=Date.parse('2026-11-07T13:00:00Z');
   const s=new InboxStore(file,{now:()=>clock});
-  const items=[{ref:'a317',section:'worth',title:'Roslynn website feedback and review',text:'Roslynn texted that business is up 25%. [Text](msg:1a1b398659576b53)',story:'roslynn-website-feedback',gmail:GMAIL,priority:'low'},
+  const items=[{ref:'a317',section:'worth',title:'Roslynn website feedback and review',text:'Roslynn texted that business is up 25%. [Text](msg:1a1b398659576b53)',story:'roslynn-website-feedback',gmail:GMAIL,url:'/#/start/0123456789ab',priority:'low'},
     {ref:'a296',section:'held',title:'Wireless Experts Google Ads keywords',text:'Steve asked for a keyword review.',story:'wireless-experts-google-ads-keywords'},
     {ref:'t12',section:'tidied',title:'Polo launch',text:'Resolved'}];
   const d=s.add({kind:'digest',title:'Morning email digest — Sat Nov 7',text:'## Worth knowing\n- Roslynn website feedback and review: business is up.\nIgnored since the last digest: 9 threads.',items,dedupe:'digest|2026-11-07'});
-  assert.equal(d.items.length,3);assert.deepEqual(d.items[0],{ref:'a317',section:'worth',title:'Roslynn website feedback and review',text:items[0].text,story:'roslynn-website-feedback',gmail:GMAIL,priority:'low',state:'open',actedAt:null,ackedAt:null,note:'',lastAction:null});
-  assert.deepEqual([d.items[1].priority,d.items[1].gmail,d.items[2].section],['normal','','tidied'],'defaults');
+  assert.equal(d.items.length,3);assert.deepEqual(d.items[0],{ref:'a317',section:'worth',title:'Roslynn website feedback and review',text:items[0].text,story:'roslynn-website-feedback',gmail:GMAIL,url:'/#/start/0123456789ab',priority:'low',state:'open',actedAt:null,ackedAt:null,note:'',lastAction:null});
+  assert.deepEqual([d.items[1].priority,d.items[1].gmail,d.items[1].url,d.items[2].section],['normal','','','tidied'],'defaults');
+  assert.throws(()=>s.add({title:'x',items:[{ref:'a1',title:'t',url:'javascript:alert(1)'}]}),e=>e.code==='bad_item','an item\'s start link is checked like an entry\'s');
   assert.equal(s.add({kind:'alert',title:'plain'}).items.length,0,'an alert has no items');
   assert.throws(()=>s.add({title:'x',items:'nope'}),e=>e.code==='bad_items');
   assert.throws(()=>s.add({title:'x',items:[{ref:'a1',title:'one'},{ref:'a1',title:'two'}]}),e=>e.code==='bad_item'&&/used twice/.test(e.message));

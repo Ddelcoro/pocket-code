@@ -49,7 +49,8 @@ const checkSince = v => { if (v == null || v === '') return null; const t = Date
 const source = v => line(v, LIMITS.source) || 'inbox-monitor';
 const textMax = kind => kind === 'digest' ? LIMITS.digestText : LIMITS.text;
 // 1.95: a digest's items. `ref` is the watcher's handle (an alert id, say) and must be unique within the entry; a bad item is refused
-// on add (the watcher's call) and dropped on load (a file edited by hand).
+// on add (the watcher's call) and dropped on load (a file edited by hand). `url` is the item's own briefed start link, when the
+// watcher made one, so the owner can start a conversation about that one line.
 const REF_RE = /^[0-9A-Za-z][0-9A-Za-z:_.-]{0,39}$/;
 function checkItem(raw, i, { strict }) {
   const bad = msg => fail(`Item ${i + 1}: ${msg}`, 400, { code: 'bad_item' });
@@ -60,7 +61,7 @@ function checkItem(raw, i, { strict }) {
   const keep = (f, v) => { try { return f(v); } catch (e) { if (strict) throw bad(e.message); return ''; } };
   const ok = (v, list, d) => list.includes(v) ? v : d;
   return { ref, section: strict ? pick(raw.section, SECTIONS, 'worth', 'section') : ok(raw.section, SECTIONS, 'worth'), title, text: str(raw.text, LIMITS.itemText), story: line(raw.story, LIMITS.story),
-    gmail: keep(checkGmail, raw.gmail), priority: strict ? pick(raw.priority, PRIORITIES, 'normal', 'priority') : ok(raw.priority, PRIORITIES, 'normal'),
+    gmail: keep(checkGmail, raw.gmail), url: keep(checkUrl, raw.url), priority: strict ? pick(raw.priority, PRIORITIES, 'normal', 'priority') : ok(raw.priority, PRIORITIES, 'normal'),
     state: ok(raw.state, ITEM_STATES, 'open'), actedAt: raw.actedAt || null, ackedAt: raw.ackedAt || null, note: str(raw.note, NOTE_MAX), lastAction: ITEM_ACTIONS.includes(raw.lastAction) ? raw.lastAction : null };
 }
 function checkItems(raw, { strict }) {

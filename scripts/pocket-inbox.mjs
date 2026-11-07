@@ -76,6 +76,7 @@ function card(e) {
       if (it.section !== sec) { sec = it.section; lines.push(`  ${SECTION[sec] || sec}:`); }
       lines.push(`  - ${it.title}  [${it.ref}]${it.state !== 'open' ? ' · ' + (ITEM[it.state] || it.state) : ''}${it.story ? '  story: ' + it.story : ''}`);
       if (it.text) lines.push('      ' + plain(it.text).split('\n').join('\n      '));
+      if (it.url) lines.push(`      Open: ${it.url}`);
     }
     const rest = plain(e.text).split('\n').filter(l => l.trim() && !l.startsWith('## ') && !l.startsWith('- '));
     if (rest.length) lines.push('  ' + rest.join('\n  '));

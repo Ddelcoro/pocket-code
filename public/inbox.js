@@ -74,7 +74,8 @@ function inboxItemHTML(it){
  const facts=[it.story?esc(it.story.replace(/-/g,' ')):'',it.priority&&it.priority!=='normal'?esc(it.priority):''].filter(Boolean).join(' · ');
  const acts=!inboxActable(it)?'':it.state!=='open'?`<span class="inbox-item-state">${esc(INBOX_ITEM_STATE[it.state]||it.state)}</span><button class="chip" data-item-act="restore" data-item="${esc(it.ref)}" title="Take that back">Undo</button>`
   :`<button class="chip inbox-item-alert" data-item-act="alert" data-item="${esc(it.ref)}" title="Make this an alert of its own; the watcher alerts on this kind of thing from now on">${IC.bell}Alert me</button><button class="chip" data-item-act="resolve" data-item="${esc(it.ref)}" title="This situation is over; the watcher stops following it">${IC.tick}Resolved</button><button class="chip" data-item-act="not_useful" data-item="${esc(it.ref)}" title="Don’t tell me about this kind of thing">${IC.bellOff}Not useful</button>`;
- return `<article class="inbox-item-card state-${esc(it.state)}" data-item-card="${esc(it.ref)}"><h4>${esc(it.title)}</h4>${it.text?`<div class="inbox-body">${inboxText(it.text)}</div>`:''}${facts?`<p class="inbox-item-facts">${facts}</p>`:''}<div class="inbox-item-actions">${acts}${it.gmail?`<a class="chip" href="${esc(it.gmail)}" target="_blank" rel="noopener">${IC.globe}Gmail</a>`:''}</div></article>`;
+ const talk=inboxActable(it)&&inboxTarget({url:it.url||''})?`<button class="chip" data-item-go="${esc(it.ref)}" title="A new conversation already briefed with this story and its evidence; the watcher learns nothing from it">${IC.plus}Start a conversation</button>`:''; // 1.95.1: about this one line, now, no rule
+ return `<article class="inbox-item-card state-${esc(it.state)}" data-item-card="${esc(it.ref)}"><h4>${esc(it.title)}</h4>${it.text?`<div class="inbox-body">${inboxText(it.text)}</div>`:''}${facts?`<p class="inbox-item-facts">${facts}</p>`:''}<div class="inbox-item-actions">${talk}${acts}${it.gmail?`<a class="chip" href="${esc(it.gmail)}" target="_blank" rel="noopener">${IC.globe}Gmail</a>`:''}</div></article>`;
 }
 function inboxItemsHTML(e){
  const groups=[];let sec=null;
@@ -238,11 +239,15 @@ function inboxSheet(id){
  sh.querySelector('[data-dismiss]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'dismiss',id},'Dismissed');});
  sh.querySelector('[data-restore]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'restore',id},'Restored');});
  const ITEM_DONE={alert:'Alert requested. The watcher sends it as an alert at its next check and learns from it',resolve:'Marked resolved',not_useful:'Noted: not useful',restore:'Undone'};
- const bindItems=()=>sh.querySelectorAll('[data-item-act]').forEach(b=>b.onclick=async()=>{ // 1.95: the sheet stays open; the card repaints with its new state
+ const bindItems=()=>{sh.querySelectorAll('[data-item-act]').forEach(b=>b.onclick=async()=>{ // 1.95: the sheet stays open; the card repaints with its new state
   const act=b.dataset.itemAct,ref=b.dataset.item;b.disabled=true;
   const ent=await inboxAct({action:act,id,item:ref},ITEM_DONE[act]);
   const wrap=sh.querySelector('[data-items]');
   if(ent&&wrap){wrap.innerHTML=inboxItemsHTML(ent);bindItems();}else b.disabled=false;
+ });bindItemGo();};
+ const bindItemGo=()=>sh.querySelectorAll('[data-item-go]').forEach(b=>b.onclick=()=>{ // 1.95.1: the item's own start link opens like an entry's
+  const it=(inboxById(id)?.items||[]).find(x=>x.ref===b.dataset.itemGo),t=it?inboxTarget({url:it.url||''}):'';
+  if(!t)return;closeCurrentSheet?.();if(/^https?:\/\//.test(t))window.open(t,'_blank','noopener');else location.hash=t;
  });
  bindItems();
  if(e.state==='new')inboxMarkRead(e);

@@ -47,21 +47,33 @@ def seed(store):
     return aid
 
 
+def fake_pocket_root():
+    import tempfile
+    root = Path(tempfile.mkdtemp())
+    (root / "scripts").mkdir()
+    (root / "scripts" / "pocket-start.mjs").write_text("console.log('/#/start/0123456789ab');\n")
+    return str(root)
+
+
 def test_the_digest_carries_its_items():
     store, _ = setup()
     pocket = Pocket()
     E.DELIVERIES = [pocket]
     aid = seed(store)
-    E.send_digest(store, [], False)
+    E.CFG.pocket = {"root": fake_pocket_root()}  # an open line gets a briefed start link, as an alert does
+    try:
+        E.send_digest(store, [], False)
+    finally:
+        E.CFG.pocket = {}
     assert len(pocket.digests) == 1, pocket.digests
     title, text, items = pocket.digests[0]
     assert "## Worth knowing" in text and "Roslynn website feedback and review" in text
     worth = [i for i in items if i["section"] == "worth"]
     assert worth == [{"ref": f"a{aid}", "section": "worth", "title": "Roslynn website feedback and review",
                       "text": f"Roslynn texted that business is up 25% since the new site. [Text](msg:{T})", "story": "roslynn-website-feedback",
-                      "gmail": f"https://mail.google.com/mail/u/0/#all/{T}", "priority": "low"}], worth
+                      "gmail": f"https://mail.google.com/mail/u/0/#all/{T}", "priority": "low", "url": "/#/start/0123456789ab"}], worth
     tidied = [i for i in items if i["section"] == "tidied"]
-    assert tidied and tidied[0]["ref"].startswith("t") and tidied[0]["title"] == "Polo launch" and tidied[0]["text"] == "Resolved", tidied
+    assert tidied and tidied[0]["ref"].startswith("t") and tidied[0]["title"] == "Polo launch" and tidied[0]["text"] == "Resolved" and tidied[0]["url"] == "", tidied
     assert dict(store.db.execute("select id, status from alerts").fetchall())[aid] == "digested"
 
 

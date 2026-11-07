@@ -134,6 +134,8 @@ A digest's sheet shows its lines as cards, under the headings the digest has (*H
 already resolved*, *Worth knowing*, *Taken off your Inbox*), each with its title, its text (citations are Gmail links),
 its story and these choices:
 
+- **Start a conversation**: a new conversation already briefed with that one story and its evidence, as an alert's is.
+  Nothing is sent and the watcher learns nothing from it; it is for dealing with this one line now.
 - **Alert me**: this line should have been an alert. The watcher sends that story as an alert of its own at its next
   check (within a minute or two, whatever quiet hours say, since you are up and asking) and learns from it the way it
   learns from a Gmail label: a rule under *Learned from your choices* saying to alert on that kind of mail.

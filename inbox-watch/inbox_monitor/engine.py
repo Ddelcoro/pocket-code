@@ -1438,9 +1438,14 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
     first = lambda t: (t or "").strip().splitlines()[0] if (t or "").strip() else ""  # noqa: E731
 
     def item(a, section: str, text: str) -> dict:
-        """1.95: the line as data for Pocket, where each gets its own choices; `ref` a<alert id> is what its feedback names."""
+        """1.95: the line as data for Pocket, where each gets its own choices; `ref` a<alert id> is what its feedback names. A line
+        still open (held, worth knowing) also gets a briefed start link, like an alert's, so the owner can talk about that one
+        thing now without teaching the watcher anything."""
+        url = None
+        if section in ("held", "worth") and not dry_run and not MODE.replay and CFG.pocket.get("root"):
+            url = start_link(CFG.pocket, briefing_for(store, a, None), f"Email: {a['subject']}", log)
         return {"ref": f"a{a['id']}", "section": section, "title": a["subject"] or "", "text": text, "story": a["issue_key"] or "",
-                "gmail": GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else "", "priority": a["priority"] or "normal"}
+                "gmail": GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else "", "priority": a["priority"] or "normal", "url": url or ""}
     lines: list[str] = []
     items: list[dict] = []
     if still:
@@ -1458,7 +1463,7 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
         han = [t["title"] for t in tidied if t["verdict"] == "handled"]
         lines += [f"## Taken off your Inbox ({len(tidied)})"] + ([f"- Resolved: {', '.join(res)}"] if res else []) + ([f"- Handled, still followed: {', '.join(han)}"] if han else [])
         items += [{"ref": f"t{t['id']}", "section": "tidied", "title": t["title"] or "", "text": "Resolved" if t["verdict"] == "resolved" else "Handled, still followed",
-                   "story": t["issue_key"] or "", "gmail": "", "priority": "normal"} for t in tidied]
+                   "story": t["issue_key"] or "", "gmail": "", "priority": "normal", "url": ""} for t in tidied]
     lines += [f"Ignored since the last digest: {ignored} threads. Reply if something should have reached you."]
     text = "\n".join(lines)
     if overflow or digest_items or ignored:
