@@ -32,6 +32,11 @@ class Pocket:
     def feedback(self):
         return self.items
 
+    open_entries: list = []
+
+    def inbox_open(self):
+        return self.open_entries
+
     def ack(self, ids):
         self.acked.extend(ids)
 
@@ -131,3 +136,26 @@ if __name__ == "__main__":
         if name.startswith("test_"):
             fn()
             print("ok", name)
+
+
+def test_a_story_already_on_the_list_is_not_a_new_card():
+    # Brad, 2026-11-07: nothing already in the Inbox comes back in the morning brief as a new card.
+    store, _ = setup()
+    pocket = Pocket()
+    E.DELIVERIES = [pocket]
+    aid = seed(store)
+    other = store.queue_alert("fact:other", issue_key="other-story", thread_id="18f0aa01b2c3d4e8", kind="digest", priority="low",
+                              text="Something else.", next_step=None, subject="Other story", sender="x@example.com", status="queued")
+    pocket.open_entries = [{"id": "abcabcabcabc", "kind": "alert", "state": "opened", "story": "roslynn-website-feedback", "gmail": "", "source": "inbox-monitor"},
+                           {"id": "dddddddddddd", "kind": "digest", "state": "new", "story": "other-story", "gmail": "", "source": "inbox-monitor"}]
+    E.CFG.pocket = {"root": fake_pocket_root()}
+    try:
+        E.send_digest(store, [], False)
+    finally:
+        E.CFG.pocket = {}
+    title, text, items = pocket.digests[0]
+    by = {i["ref"]: i for i in items}
+    assert by[f"a{aid}"]["section"] == "listed" and by[f"a{aid}"]["url"] == "/#/inbox/abcabcabcabc", by[f"a{aid}"]
+    assert by[f"a{other}"]["section"] == "worth" and by[f"a{other}"]["url"] == "/#/start/0123456789ab", "an open digest entry on the story does not count; a worth line keeps its start link"
+    assert "## Already on your list (1)" in text and text.index("## Worth knowing") < text.index("## Already on your list"), text
+    assert dict(store.db.execute("select id, status from alerts").fetchall()) == {aid: "digested", other: "digested"}

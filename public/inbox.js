@@ -67,10 +67,14 @@ function inboxText(text){
 /* 1.95: a digest's items (inbox.mjs items), each a card with its own choices. Alert me asks the watcher to send that story as
    an alert of its own and to learn from it; Resolved and Not useful land on that story, not on the whole digest; Undo takes
    any of them back. A line that resolved overnight or was taken off by the tidy pass is history and only links to Gmail. */
-const INBOX_SECTION={held:'Held overnight',resolved:'Came up overnight and already resolved',worth:'Worth knowing',tidied:'Taken off your Inbox'};
+const INBOX_SECTION={held:'Held overnight',resolved:'Came up overnight and already resolved',worth:'Worth knowing',tidied:'Taken off your Inbox',listed:'Already on your list'};
 const INBOX_ITEM_STATE={alerted:'Alert requested',resolved:'Resolved',not_useful:'Not useful'};
 const inboxActable=it=>it.section==='worth'||it.section==='held';
 function inboxItemHTML(it){
+ if(it.section==='listed'){ // 1.95 (Brad): an open entry already has this story; one line that opens it, never a new card
+  const t=inboxTarget({url:it.url||''}),first=inboxFirst(it.text);
+  return `<p class="inbox-item-listed">${t?`<a href="${esc(t.startsWith('#')?t:'#'+t)}">${esc(it.title)}</a>`:`<strong>${esc(it.title)}</strong>`}${first?` <span>${esc(first)}</span>`:''}</p>`;
+ }
  const facts=[it.story?esc(it.story.replace(/-/g,' ')):'',it.priority&&it.priority!=='normal'?esc(it.priority):''].filter(Boolean).join(' · ');
  const acts=!inboxActable(it)?'':it.state!=='open'?`<span class="inbox-item-state">${esc(INBOX_ITEM_STATE[it.state]||it.state)}</span><button class="chip" data-item-act="restore" data-item="${esc(it.ref)}" title="Take that back">Undo</button>`
   :`<button class="chip inbox-item-alert" data-item-act="alert" data-item="${esc(it.ref)}" title="Make this an alert of its own; the watcher alerts on this kind of thing from now on">${IC.bell}Alert me</button><button class="chip" data-item-act="resolve" data-item="${esc(it.ref)}" title="This situation is over; the watcher stops following it">${IC.tick}Resolved</button><button class="chip" data-item-act="not_useful" data-item="${esc(it.ref)}" title="Don’t tell me about this kind of thing">${IC.bellOff}Not useful</button>`;

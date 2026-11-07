@@ -69,7 +69,7 @@ function card(e) {
   if (e.story) lines.push(`  Story: ${e.story}`);
   lines.push(`  From: ${e.source}`);
   if (Array.isArray(e.items) && e.items.length) { // 1.95: a digest's items, with the ref `act --item` takes
-    const SECTION = { held: 'Held overnight', resolved: 'Came up overnight and already resolved', worth: 'Worth knowing', tidied: 'Taken off your Inbox' };
+    const SECTION = { held: 'Held overnight', resolved: 'Came up overnight and already resolved', worth: 'Worth knowing', tidied: 'Taken off your Inbox', listed: 'Already on your list' };
     const ITEM = { alerted: 'alert requested', resolved: 'resolved', not_useful: 'not useful' };
     let sec = '';
     for (const it of e.items) {

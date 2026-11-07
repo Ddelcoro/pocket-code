@@ -143,7 +143,9 @@ its story and these choices:
 - **Undo**: takes any of the three back.
 - **Gmail**: the thread.
 
-A line that resolved overnight or that the tidy pass took off is history and has only the Gmail link. The card says
+A line whose story already has an open alert on your list is not a new card: it sits under **Already on your list** as one
+line that opens that entry, and your decision belongs on the entry. A line that resolved overnight or that the tidy pass took
+off is history and has only the Gmail link. The card says
 *Alert requested*, *Resolved* or *Not useful* once you have decided, and the digest itself stays open until you dismiss
 it. A digest from before 1.95 has no items and shows its text alone.
 

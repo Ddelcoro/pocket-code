@@ -24,7 +24,8 @@ export const KINDS = ['alert', 'digest', 'lookahead'];
 export const PRIORITIES = ['critical', 'high', 'normal', 'low'];
 export const STATES = ['new', 'opened', 'dismissed', 'resolved', 'not_useful'];
 export const ACTIONS = ['open', 'unread', 'dismiss', 'resolve', 'not_useful', 'restore'];
-export const SECTIONS = ['held', 'resolved', 'worth', 'tidied']; // where a digest item sat: held overnight, resolved overnight, worth knowing, taken off by the tidy pass
+export const SECTIONS = ['held', 'resolved', 'worth', 'tidied', 'listed']; // where a digest item sat: held overnight, resolved overnight, worth knowing, taken off by the tidy pass, already on the list (an open alert on that story: the item links to it, no card)
+const HISTORY = ['resolved', 'tidied', 'listed']; // items that take no decision: the story is closed, gone, or decided on its own entry
 export const ITEM_STATES = ['open', 'alerted', 'resolved', 'not_useful'];
 export const ITEM_ACTIONS = ['alert', 'resolve', 'not_useful', 'restore'];
 const ACTED = ['dismissed', 'resolved', 'not_useful'];
@@ -216,12 +217,26 @@ export class InboxStore {
     const e = { id: shortId(), kind, priority: pick(input.priority, PRIORITIES, 'normal', 'priority'), title, text: str(input.text, textMax(kind)),
       story: line(input.story, LIMITS.story), source: source(input.source), url: checkUrl(input.url), gmail: checkGmail(input.gmail), doc: checkDoc(input.doc), dedupe: str(input.dedupe, DEDUPE_MAX),
       state: 'new', at: iso(now), seenAt: null, actedAt: null, ackedAt: null, note: '', by: actor === 'ui' ? 'ui' : 'cli', actedBy: null, revision: 1, lastAction: null, sessions: [], items: checkItems(input.items, { strict: true }) };
+    this.foldListed(e);
     if (e.dedupe) {
       const seen = this.entries.find(x => x.dedupe === e.dedupe && ms(x.at) >= now - DAY);
       if (seen) return { ...this.view(seen), duplicate: true };
     }
     this.entries.push(e); this.cap(); this.save();
     return this.view(e);
+  }
+
+  // 1.95 (Brad): nothing already on the owner's list comes back as a new card. A digest item whose story (or Gmail thread) has an
+  // open alert entry becomes a 'listed' line that links to that entry (/#/inbox/<id>), whatever section the watcher gave it.
+  foldListed(e) {
+    if (!e.items.length) return;
+    const open = this.entries.filter(x => x.kind === 'alert' && (x.state === 'new' || x.state === 'opened') && x.source === e.source);
+    for (const it of e.items) {
+      if (HISTORY.includes(it.section)) continue;
+      const hit = open.find(x => (it.story && x.story === it.story) || (it.gmail && x.gmail === it.gmail));
+      if (hit) { it.section = 'listed'; it.url = '/#/inbox/' + hit.id; }
+    }
+    e.items = [...e.items.filter(i => i.section !== 'listed'), ...e.items.filter(i => i.section === 'listed')]; // listed lines last; the watcher's order otherwise
   }
 
   // state: 'new' (unread), 'all' (everything but dismissed) or 'dismissed'. Newest first; `since` keeps entries at or after it.
@@ -265,6 +280,7 @@ export class InboxStore {
     const e = this.get(str(id, 40)), ref = str(item, LIMITS.ref);
     const it = e.items.find(x => x.ref === ref);
     if (!it) throw fail('That digest has no such item.', 404, { code: 'item_missing' });
+    if (HISTORY.includes(it.section) && action !== 'restore') throw fail(it.section === 'listed' ? 'That line is already on your list; decide on its own entry.' : 'That line is history; there is nothing to decide.', 400, { code: 'item_history' });
     const at = iso(this.now()), n = typeof note === 'string' ? str(note, NOTE_MAX) : null, target = ITEM_TARGET[action];
     let changed = false;
     if (action === 'restore') {

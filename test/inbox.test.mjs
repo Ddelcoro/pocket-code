@@ -375,6 +375,17 @@ test('InboxStore: digest items are checked on add, kept on reload, decided one a
   assert.deepEqual(s.feedback().map(f=>[f.id,f.action]),[[`${d.id}/a317`,'restore'],[`${d.id}/a296`,'not_useful']]);
   clock+=1000;s.act({action:'dismiss',id:d.id});assert.deepEqual(s.feedback().map(f=>f.id),[d.id,`${d.id}/a317`,`${d.id}/a296`]);
   assert.equal(s.ack([d.id,`${d.id}/a317`,`${d.id}/a296`]),3);assert.deepEqual(s.feedback(),[]);
+  // 1.95 (Brad): a line whose story already has an open alert on the list is not a new card: it is 'listed', links to that entry, and takes no decision.
+  const open=s.add({kind:'alert',title:'Wireless Experts Google Ads keywords',story:'wireless-experts-google-ads-keywords',gmail:GMAIL});
+  const gone=s.add({kind:'alert',title:'Old one',story:'old-story'});s.act({action:'resolve',id:gone.id});
+  const d2=s.add({kind:'digest',title:'Morning email digest — Sun Nov 8',text:'## Worth knowing\n- a\n- b',dedupe:'digest|2026-11-08',items:[
+    {ref:'a400',section:'worth',title:'Steve wants the keyword list',text:'Steve asked again.',story:'wireless-experts-google-ads-keywords'},
+    {ref:'a401',section:'held',title:'Same thread, other story',text:'x',story:'other',gmail:GMAIL},
+    {ref:'a402',section:'worth',title:'Old story returns',text:'y',story:'old-story'},
+    {ref:'a403',section:'worth',title:'Fresh',text:'z',story:'fresh'}]});
+  assert.deepEqual(d2.items.map(i=>[i.ref,i.section,i.url]),[['a402','worth',''],['a403','worth',''],['a400','listed','/#/inbox/'+open.id],['a401','listed','/#/inbox/'+open.id]],'story or thread matches an open alert; a resolved one does not; listed lines go last, the rest keep their order');
+  assert.throws(()=>s.act({action:'alert',id:d2.id,item:'a400'}),e=>e.code==='item_history'&&/already on your list/.test(e.message));
+  assert.throws(()=>s.act({action:'resolve',id:d.id,item:'t12'}),e=>e.code==='item_history');
   // Reload: items come back; a hand-edited bad item is dropped, not fatal.
   const raw=JSON.parse(fs.readFileSync(file,'utf8'));raw.entries[0].items.push({ref:'bad ref',title:'x'},{ref:'a317',title:'dup'});fs.writeFileSync(file,JSON.stringify(raw));
   const s2=new InboxStore(file,{now:()=>clock});const e2=s2.get(d.id);

@@ -1446,6 +1446,23 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
             url = start_link(CFG.pocket, briefing_for(store, a, None), f"Email: {a['subject']}", log)
         return {"ref": f"a{a['id']}", "section": section, "title": a["subject"] or "", "text": text, "story": a["issue_key"] or "",
                 "gmail": GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else "", "priority": a["priority"] or "normal", "url": url or ""}
+    # 1.95 (Brad): a story that already has an open entry on the owner's list never comes back as a new card. Such lines go
+    # under "Already on your list", each linking to its entry; Pocket applies the same rule itself when it stores the digest.
+    listed: dict[int, str] = {}
+    box = pocket_inbox()
+    if box is not None and not MODE.replay:
+        try:
+            open_entries = [e for e in box.inbox_open() if e.get("kind") == "alert"]
+        except Exception as ex:  # noqa: BLE001
+            log(f"digest: could not read the open entries ({ex}); every line is a card")
+            open_entries = []
+        for a in still + digest_items:
+            gmail = GMAIL_THREAD_URL.format(thread_id=a["thread_id"]) if a["thread_id"] else None
+            hit = next((e for e in open_entries if (a["issue_key"] and e.get("story") == a["issue_key"]) or (gmail and e.get("gmail") == gmail)), None)
+            if hit and hit.get("id"):
+                listed[a["id"]] = f"/#/inbox/{hit['id']}"
+    still, on_list = [a for a in still if a["id"] not in listed], [a for a in still + digest_items if a["id"] in listed]
+    digest_items = [a for a in digest_items if a["id"] not in listed]
     lines: list[str] = []
     items: list[dict] = []
     if still:
@@ -1457,6 +1474,9 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
     if digest_items:
         lines += ["## Worth knowing"] + [f"- {a['subject'] or ''}: {a['text'] or ''}" for a in digest_items]
         items += [item(a, "worth", a["text"] or "") for a in digest_items]
+    if on_list:
+        lines += [f"## Already on your list ({len(on_list)})"] + [f"- {a['subject'] or ''}: {first(a['text'])}" for a in on_list]
+        items += [dict(item(a, "listed", first(a["text"])), url=listed[a["id"]]) for a in on_list]
     tidied = store.db.execute("select id, title, verdict, issue_key from tidy_log where acted=1 and at>=? order by id", (since,)).fetchall()
     if tidied:
         res = [t["title"] for t in tidied if t["verdict"] == "resolved"]
@@ -1485,7 +1505,7 @@ def send_digest(store: Store, overflow: list[sqlite3.Row], dry_run: bool) -> Non
                 return
             ref = ",".join(refs) or None
             store.set("digest_memory_pending", json.dumps({"title": title, "text": text, "date": today}))
-        for a in still + digest_items:
+        for a in still + digest_items + on_list:
             store.mark_sent(a["id"], ref, None, "dry-run" if dry_run else "digested")
     store.set("last_digest_date", today)
     store.set("last_digest_at", iso())
