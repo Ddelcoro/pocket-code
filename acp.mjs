@@ -366,7 +366,7 @@ async function openAcpSession({ sessionId, cwd, model, cmd, args, env, resume, i
     // session/load requires {sessionId, cwd, mcpServers} (cwd a string). On resume the caller may
     // not know the original cwd; recover it from session/list. (Verified against real OpenCode.)
     let opened;
-    if (resume && sessionId) { const c = cwd || await sessionCwd(client, sessionId); opened = await client.loadSession({ sessionId, cwd: c || '/', mcpServers: [] }); }
+    if (resume && sessionId) { const c = cwd || await sessionCwd(client, sessionId); opened = await client.loadSession({ sessionId, cwd: c && !fs.existsSync(c) ? HOME : c || '/', mcpServers: [] }); } // 1.98: its folder may be gone
     else { opened = await client.newSession({ cwd, mcpServers: [] }); sid = opened?.sessionId; }
     if (!sid) throw new Error('acp: no session id');
     const session = { sessionId: sid, client, cwd, config: opened?.configOptions || [], turn: null, instructionsFile, askKey, lastActivityAt: Date.now(), commands: [], context: null };

@@ -99,7 +99,7 @@ If the window narrows below 1280 px, the open panel turns into a sheet and keeps
 |---|---|
 | **Results & links** | Reports, files and links shared in the conversation, with **Find a result** and **Refresh**. |
 | **Queued instructions** | Messages saved to run after the current reply, each as its own reply ([the queue](conversation.md#manage-the-queue)). Stopping the reply pauses the queue. |
-| **Git workspace** | Read only: the branch, the changed files (the first 250) and a **Working tree** or **Staged** diff for each. Hidden when the workspace is not a Git repository. |
+| **Git workspace** | Read only: the branch, the changed files (the first 250) and a **Working tree** or **Staged** diff for each. [Worktrees](conversation.md#see-and-remove-worktrees) sit below the files. Hidden when the workspace is not a Git repository. |
 | **Side chat** | A private question about the conversation that adds nothing to it ([side chat](conversation.md#ask-a-side-question-side-chat)). On a desktop it also opens from the **Side chat** chip above the message box, or Ctrl/⌘ ;. |
 
 ### Close views and processes

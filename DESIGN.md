@@ -1087,3 +1087,14 @@ answer. The `h2` carries it: `Working in <folder> · <branch>`, wrapping anywher
 `select` in `.git-pick` appears only with two or more repositories (44px, `--surface`, `--line`), because a phone already has
 the right control for this. `.git-also` is one `--dim` line with plain links. No `--warn`: two conversations in a folder is
 worth knowing, not a fault. The Branch sheet adds `Starts in <folder>.` to its existing note. No motion.
+
+## Worktrees (1.98)
+
+Pinned Operate refinement (design-studio → impeccable): variance 2, motion 1, density 7; existing tokens, no new colour. Read:
+the person is clearing old folders and wants to know what's safe in one look, so the groups carry the answer and each row
+says why in plain words. `.git-trees` follows the changed files in the panel's own flow, with no card around it. Groups are
+native `details`, open from 700px and closed on a phone with their counts showing, 44px rows. A row is name (semibold), then
+`--dim` branch, date and reason; hairline `--line` between rows. **Remove** is a chip and only exists on a Ready row, so the
+list has no destructive `--clay`. The confirm sheet `.git-remove` is the one place with `--clay` (**Remove folder**) and the
+one place with `--warn`, on the line that names ignored files, because that is what's lost. **Keep it** is a chip. No motion:
+groups fill in without animating.

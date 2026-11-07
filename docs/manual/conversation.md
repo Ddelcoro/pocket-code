@@ -1,6 +1,6 @@
 <!-- manual
-checked: 1.96.0
-sources: choices.mjs, starts.mjs, results.mjs, queue.mjs, sidechat.mjs, public/sidechat.js, subagents.mjs, workspace.mjs, public/secret-detect.js
+checked: 1.98.0
+sources: choices.mjs, starts.mjs, results.mjs, queue.mjs, sidechat.mjs, public/sidechat.js, subagents.mjs, workspace.mjs, worktrees.mjs, public/secret-detect.js
 -->
 # Working in a conversation
 
@@ -190,6 +190,35 @@ Open** in Results). **Settings → Projects, files, tasks & vault → Keep files
 Git limits: the first 250 changed files, 256 KB per diff. The repository must be inside the server user's home directory.
 Files in hidden folders, symlinks that point outside the repository, and names that look like keys or credentials
 (`id_rsa`, `credentials`, `secrets`, `*.pem`, `*.key` and similar) are listed but cannot be previewed.
+
+### See and remove worktrees
+
+A worktree is a second folder of the same repository, on its own branch, so two pieces of work don't get in each other's way.
+Agents make them and rarely clean up. Under the changed files, the Git panel lists every worktree of the repository in three
+groups, and only shows the section when there is more than the repository's main folder. Each row has the folder, the branch
+and the date of its last commit. Assistant mode doesn't show it.
+
+| Group | Means | Row says |
+|---|---|---|
+| **In use** | A conversation is running there, one was active in the last 24 hours, a process has it open, or it is your live Pocket folder. | Which one, with a link to the conversation |
+| **Has work** | There are uncommitted changes, commits Pocket can't find anywhere else, the worktree is locked, or a conversation used it in the last 14 days. | What is keeping it: `2 uncommitted changes`, `Commits not safe elsewhere`, `Locked`, `Used 3 days ago` |
+| **Ready to remove** | Nothing would be lost and it has been idle for 14 days. The commit is in the default branch or on a remote, or its pull request merged at exactly this commit. | Why it's safe: `Merged in PR #41`, `In origin/main`, `On a remote branch` |
+
+The list opens first and the groups fill in as each folder is checked. On a phone the groups start closed with their counts
+showing.
+
+**Remove** only appears on a **Ready to remove** row. It opens a sheet that names what goes with the folder, then asks once:
+
+1. Ignored files that would be deleted, such as `.env` or exported data. Rebuildable folders like `node_modules` are not
+   listed.
+2. Any conversation that started in that folder. It keeps its history and carries on from your home folder. Pocket says so,
+   once, the next time you send it a message.
+
+**Remove folder** deletes the folder and keeps the branch and its commits. Pocket checks again at the moment you confirm. If
+anything changed since the sheet opened, it refuses and lists the worktree again. Pocket never forces a removal, never
+removes the repository's main folder, a locked worktree, or the folder Pocket runs from, and never deletes a branch. Only the
+signed-in person can remove one: agents and the command-line token can't, and each removal is written to
+`worktrees-removed.jsonl`.
 
 ### Find in a conversation
 
@@ -390,6 +419,7 @@ every message, branch and side chat question, so a held message is never recorde
 | Conversation history | The provider's own transcript (Claude Code's project files, Codex's session store). Pocket does not copy it. |
 | Uploaded attachments | `~/pocket-uploads/<year-month>/` |
 | Follow-up queue | `followup-queue.json` in `POCKET_DATA_DIR` |
+| Worktree removals | `worktrees-removed.jsonl` in `POCKET_DATA_DIR`, one line each |
 | Delivery receipts (for Retry same message) | `delivery-receipts.json` in `POCKET_DATA_DIR`, kept a week, at most 2,000 |
 | Branch links (Branch of …) | `session-meta.json` in `POCKET_DATA_DIR` |
 | File-card pictures | `artifact-thumbs/` in `POCKET_DATA_DIR` |
@@ -482,6 +512,10 @@ Variables go in the Pocket Code directory's `.env`; restart Pocket after changin
 | Git: "This workspace is not an available Git repository." | The conversation hasn't worked in a repository. | Nothing to fix; Git only shows repositories. |
 | No Git button in a conversation that is in a repository | The conversation runs in a folder outside the server user's home, or its repository starts above home. Git only reads repositories inside home, so the button is not shown there. | Use Changed files for that conversation's edits. |
 | Git: "This diff exceeds the 256 KB preview limit." | The diff is too large to preview. | Ask the agent for a summary or inspect it in an editor. |
+| "This conversation's folder is gone, so it carries on from your home folder." | The folder it started in was removed. | Nothing to fix. History is kept. Tell the agent which folder to work in if it matters. |
+| **Worktrees** section missing | The repository has only its main folder, or Pocket is in Assistant mode. | None needed. |
+| A worktree you expected to remove is under **Has work** | It has changes, commits Pocket can't find elsewhere, or a conversation used it in the last 14 days. The row says which. | Commit and push, or merge the pull request, then open Git again. A recently used folder moves to Ready once 14 days pass. |
+| Remove: "This worktree changed…" | Something changed after the sheet opened. | Look at the list again, and remove it from there if it's still ready. |
 | Side chat: "Send a message in the conversation first…" | The conversation has no transcript yet. | Send a first message, then ask again. |
 | Side chat: "This side chat reached its spending cap." | One Claude side chat spent `POCKET_SIDE_CHAT_BUDGET_USD`. | **New side chat**. |
 | Side chat: "Too many side chats are answering right now." | `POCKET_SIDE_CHAT_MAX` side chats are all mid-answer. | Wait for one to finish. |

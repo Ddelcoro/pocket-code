@@ -3558,6 +3558,7 @@ async function submitPending(id) {
     // 1.89.2: held for background jobs on the earlier Claude login: it sends by itself when they finish, or now with Stop
     if (result.afterJobs) deliveryNotices.set(id, { text: heldForJobsText(result.jobs), itemId: result.itemId });
     else deliveryNotices.set(id, result.queued ? result.paused ? 'Saved in Queue. Open Queue to start it when ready.' : 'Queued after the current reply.' : result.steered ? (result.skippedQuestions ? 'Questions skipped. Your message went to the running reply.' : 'Sent to the running reply.') : 'Message delivered.');
+    if (result.carriedOn) deliveryNotices.set(id, 'This conversation’s folder is gone, so it carries on from your home folder.'); // 1.98
     if (result.modelFallback) modelFellBack(id, result.modelFallback);
     if (chatId === id) {
       if (tb?.key === id && pending.files.length) tb.attachments = [];

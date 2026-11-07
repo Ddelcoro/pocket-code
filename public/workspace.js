@@ -325,7 +325,7 @@ function openDock(kind,id){if(kind==='results')return openResults(id);if(kind===
 function restoreDock(){if(hasDockRoom()&&['results','queue','git'].includes(dockKind)||hasDockRoom()&&dockKind==='side'&&SideChat.available(chatId))openDock(dockKind,chatId);}
 async function openGit(id){
  const scrim=document.createElement('div');scrim.className='scrim';const sh=document.createElement('div');sh.className='sheet git-sheet';
- sh.innerHTML='<h2 data-git-title>Git workspace</h2><label class="git-pick" data-git-pick hidden><span>Repository</span><select data-git-folder></select></label><p class="git-also" data-git-also hidden></p><p class="sheet-help">Current changes in this repository, including work from other conversations. Read only.</p><button class="chip" data-git-refresh>Refresh</button><div data-git-status role="status">Reading repository…</div><div data-git-files></div><div data-git-diff></div>';
+ sh.innerHTML='<h2 data-git-title>Git workspace</h2><label class="git-pick" data-git-pick hidden><span>Repository</span><select data-git-folder></select></label><p class="git-also" data-git-also hidden></p><p class="sheet-help">Current changes in this repository, including work from other conversations. Read only.</p><button class="chip" data-git-refresh>Refresh</button><div data-git-status role="status">Reading repository…</div><div data-git-files></div><section class="git-trees" data-git-trees aria-labelledby="git-trees-title" hidden><h3 id="git-trees-title">Worktrees</h3><p class="git-tree-progress" data-git-trees-progress></p><div data-git-trees-groups></div></section><div data-git-diff></div>';
  workspaceMount(scrim,sh,'git');let generation=0,folder='',folders=[];
  const gitPath=(tail,extra='')=>'/session/'+encodeURIComponent(id)+tail+(folder?(extra?extra+'&':'?')+'folder='+encodeURIComponent(folder):extra);
  const shortName=p=>String(p||'').split('/').filter(Boolean).pop()||p;
@@ -339,6 +339,52 @@ async function openGit(id){
   const also=sh.querySelector('[data-git-also]'),rows=(f.also||[]).slice(0,3);also.hidden=!rows.length;
   also.innerHTML=rows.length?'Also working here: '+rows.map(r=>`<a href="#/chat/${encodeURIComponent(r.id)}">${esc(r.title)}</a>`).join(', '):'';
  };
+ // 1.98: the repository's worktrees. The list is one fast read; each row's status is read four at a time and lands in its group.
+ let trees=[],treePaint=0;const treeOpen={};
+ const TREE_GROUPS=[['use','In use'],['work','Has work'],['ready','Ready to remove']];
+ const treeRow=t=>{const s=t.status,date=s.lastCommitAt?new Date(s.lastCommitAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'';
+  const chats=(s.conversations||[]).map(c=>`<a href="#/chat/${encodeURIComponent(c.id)}">${esc(c.title)}</a>`).join(', ');
+  return `<div class="git-tree"><div class="git-tree-main"><span class="git-tree-name">${esc(shortName(t.path))}</span><span class="git-tree-meta">${esc([t.branch||'No branch',date].filter(Boolean).join(' · '))}</span><span class="git-tree-meta">${esc(s.reason)}</span>${chats?`<span class="git-tree-meta">${chats}</span>`:''}</div>${s.group==='ready'?`<button class="chip" data-git-tree-remove="${esc(t.path)}" aria-label="Remove ${esc(shortName(t.path))}">Remove</button>`:''}</div>`;};
+ const paintTrees=()=>{
+  const box=sh.querySelector('[data-git-trees-groups]'),focused=document.activeElement?.dataset?.gitTreeRemove,done=trees.filter(t=>t.status).length;
+  sh.querySelector('[data-git-trees-progress]').textContent=done<trees.length?`Checking ${done} of ${trees.length}…`:'';
+  box.innerHTML=TREE_GROUPS.map(([key,label])=>{const rows=trees.filter(t=>t.status?.group===key);if(!rows.length)return '';
+   const open=treeOpen[key]??matchMedia('(min-width:700px)').matches;
+   return `<details class="git-tree-group" data-git-tree-group="${key}" ${open?'open':''}><summary>${label} (${rows.length})</summary>${rows.map(treeRow).join('')}</details>`;}).join('');
+  box.querySelectorAll('details').forEach(d=>d.ontoggle=()=>{treeOpen[d.dataset.gitTreeGroup]=d.open;});
+  box.querySelectorAll('[data-git-tree-remove]').forEach(b=>{b.onclick=()=>confirmRemoval(trees.find(t=>t.path===b.dataset.gitTreeRemove));if(focused&&b.dataset.gitTreeRemove===focused)b.focus();});
+ };
+ const paintSoon=()=>{treePaint||=requestAnimationFrame(()=>{treePaint=0;if(sh.isConnected)paintTrees();});};
+ const readTrees=async token=>{
+  const box=sh.querySelector('[data-git-trees]'),live=()=>sh.isConnected&&token===generation;
+  if(assistantMode()){box.hidden=true;return;}
+  let d;try{d=await api(gitPath('/worktrees'));}catch{d={rows:[]};}
+  if(!live())return;
+  trees=(d.rows||[]).filter(r=>!r.main);box.hidden=!trees.length;if(!trees.length)return;paintTrees();
+  const list=trees;let next=0;
+  const reader=async()=>{while(next<list.length&&live()){const t=list[next++];
+   try{t.status=await api(gitPath('/worktrees/status','?path='+encodeURIComponent(t.path)));}catch{t.status={group:'work',reason:'Could not read this worktree',conversations:[]};}
+   if(live())paintSoon();}};
+  await Promise.all([reader(),reader(),reader(),reader()]);
+ };
+ // Every check runs again on the server when you confirm, so this sheet only says what removal would mean.
+ const confirmRemoval=async t=>{
+  let plan;try{plan=await api(gitPath('/worktrees/removal','?path='+encodeURIComponent(t.path)));}catch(e){toast(e.message);return;}
+  // On a phone this sheet replaces the Git sheet, so going back opens it again. A resize can turn the side panel into one.
+  const replaced=sh.matches('[role="dialog"]'),backToGit=()=>{closeCurrentSheet?.();if(replaced)openGit(id);else load();};
+  const scrim=document.createElement('div');scrim.className='scrim';const box=document.createElement('div');box.className='sheet git-remove';
+  const shown=plan.started.slice(0,5),more=plan.started.length-shown.length;
+  box.innerHTML=`<h2>Remove ${esc(shortName(plan.path))}?</h2>`+(plan.refused?`<p class="git-remove-warn">${esc(plan.refused)}</p>`:`<p class="sheet-help">This deletes the folder. ${plan.branch?`The branch ${esc(plan.branch)} and its commits stay.`:'Its commit stays in the repository.'}</p>`)
+   +(plan.ignored.length?`<p class="git-remove-warn">These ignored files are deleted with it:</p><ul class="git-remove-files">${plan.ignored.map(f=>`<li>${esc(f)}</li>`).join('')}${plan.ignoredMore?`<li>and ${plan.ignoredMore} more</li>`:''}</ul>`:'')
+   +(shown.length?`<p class="sheet-help">${plan.started.length===1?'This conversation started':'These conversations started'} here and will carry on from your home folder: ${shown.map(c=>esc(c.title)).join(', ')}${more?` and ${more} more`:''}.</p>`:'')
+   +`<p class="git-remove-warn" data-remove-error role="alert" hidden></p><div class="git-remove-actions">${plan.refused?'':'<button class="primary" data-remove-yes>Remove folder</button>'}<button class="chip" data-remove-no>Keep it</button></div>`;
+  box.querySelector('[data-remove-no]').onclick=backToGit;
+  const yes=box.querySelector('[data-remove-yes]');
+  if(yes)yes.onclick=async()=>{yes.disabled=true;
+   try{await api('/worktrees/remove',{method:'POST',body:JSON.stringify({path:plan.path,check:plan.check})});toast('Folder removed. The branch is still there.');backToGit();}
+   catch(e){const err=box.querySelector('[data-remove-error]');err.textContent=e.message;err.hidden=false;yes.remove();}};
+  mountSheet(scrim,box);
+ };
  const load=async()=>{
   const token=++generation;sh.querySelector('[data-git-diff]').replaceChildren();const btn=sh.querySelector('[data-git-refresh]');btn.disabled=true;
   try{
@@ -348,6 +394,7 @@ async function openGit(id){
    sh.querySelector('[data-git-status]').textContent=(folder?'':d.branch+' · ')+d.total+' changed '+(d.total===1?'file':'files')+' · '+new Date(d.checkedAt).toLocaleTimeString();
    sh.querySelector('[data-git-files]').innerHTML=d.files.map((f,i)=>`<button class="git-file" data-git-file="${i}" ${f.inspectable?'':'disabled'}><code>${esc(f.status)}</code><span>${esc(f.path)}${!f.inspectable?' · Preview unavailable':''}</span></button>`).join('')+(d.limited?'<p class="sheet-help">Showing the first 250 files.</p>':'');
    sh.querySelectorAll('[data-git-file]').forEach(b=>b.onclick=()=>showDiff(d.files[Number(b.dataset.gitFile)],'working'));
+   readTrees(token);
   }catch(e){if(sh.isConnected){sh.querySelector('[data-git-status]').textContent=e.message;sh.querySelector('[data-git-files]').replaceChildren();}}
   finally{btn.disabled=false;}
  };

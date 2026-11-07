@@ -743,6 +743,24 @@ header.bar { gap: 2px; padding-inline: 8px; }
 .git-also { margin:0 0 10px;color:var(--dim);font-size:14px;line-height:1.5;overflow-wrap:anywhere; }
 .git-also a { color:var(--text); }
 [data-git-status] { margin:16px 0;color:var(--dim);font-size:14px; }
+.git-trees { margin-top:24px; }
+.git-trees h3 { font-size:14px;font-weight:600;line-height:1.5;margin:0 0 4px; }
+.git-tree-progress { color:var(--dim);font-size:14px;line-height:1.5; }
+.git-tree-progress:empty { display:none; }
+.git-tree-group summary { padding:12px 4px;color:var(--dim);font-size:14px;line-height:20px;border-bottom:1px solid var(--line);cursor:pointer; }
+.git-tree { display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 4px;border-bottom:1px solid var(--line); }
+.git-tree-main { flex:1;min-width:0;font-size:14px;line-height:1.45;overflow-wrap:anywhere; }
+.git-tree-name,.git-tree-meta { display:block; }
+.git-tree-name { font-weight:600; }
+.git-tree-meta { color:var(--dim); }
+.git-tree a { color:var(--text); }
+.git-tree .chip { flex:none; }
+.git-remove h2 { overflow-wrap:anywhere;text-transform:none;letter-spacing:0;color:var(--text); }
+.git-remove .sheet-help { overflow-wrap:anywhere; }
+.git-remove-warn { color:var(--warn);font-size:14px;line-height:1.5;margin:8px 0; }
+.git-remove-files { list-style:none;margin:0 0 12px;padding:0;max-height:30vh;overflow:auto;font:13px/1.6 ui-monospace,"Cascadia Mono",Menlo,monospace;overflow-wrap:anywhere; }
+.git-remove-actions { display:flex;flex-wrap:wrap;gap:10px;margin-top:12px; }
+.git-remove-actions .primary { min-height:44px;padding:11px 18px; }
 .git-file { width:100%;display:flex;gap:10px;text-align:left;align-items:flex-start;min-height:44px;padding:12px 4px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--text);cursor:pointer;font:inherit;font-size:14px; }
 .git-file span { overflow-wrap:anywhere; }
 .git-file code { color:var(--clay);white-space:pre; }

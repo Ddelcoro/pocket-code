@@ -130,6 +130,7 @@ const fixtureTitles=()=>{const using=!fixtureSettings.autoTitles?null:fixtureSet
  return {enabled:fixtureSettings.autoTitles,choice:fixtureSettings.titleProvider,using,helper:'claude',awaySummaries:fixtureSettings.awaySummaries,models:{claude:'haiku',codex:'gpt-6-luna'},
   claude:{available:true,reason:''},codex:{available:false,reason:'This Codex CLI does not offer gpt-6-luna. Update Codex to use it.'},
   last:{provider:'claude',model:'claude-haiku-4-5-20251001',at:Date.now()},checkedAt:Date.now()};};
+const worktreeRows={'vault-fix':{group:'use',reason:'Used in the last 24 hours',branch:'fix/vault',conversations:[{id:'f00d0000-0000-4000-8000-0000000000aa',title:'Stock count export'}]},'report-v2':{group:'work',reason:'2 uncommitted changes',branch:'feat/report-v2'},'stock-sync':{group:'ready',reason:'Merged in PR #41',branch:'feat/stock-sync'}};let worktreeRemoved=null;
 let questionRequests=[];let questionAnswers=null;
 let approvalRequests=[],approvalDecisions=[],approvalFail=false;
 const queueStarts=[]; // 1.89.2: queue/start requests (Stop background jobs and send now)
@@ -349,6 +350,10 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname.endsWith('/questions'))return json({supported:url.pathname.includes('cx:'),requests:questionRequests});
  if(url.pathname.endsWith('/questions/request-1/answer')){let raw='';for await(const c of req)raw+=c;questionAnswers=JSON.parse(raw).answers;questionRequests=[];return json({ok:true});}
+ if(url.pathname.endsWith('/worktrees'))return json({rows:[{path:'/home/work/inventory',branch:'main',main:true,locked:false},...Object.keys(worktreeRows).map(k=>({path:'/home/work/trees/'+k,branch:worktreeRows[k].branch,main:false,locked:false}))]});
+ if(url.pathname.endsWith('/worktrees/status')){const k=url.searchParams.get('path').split('/').pop();return json({path:url.searchParams.get('path'),lastCommitAt:Date.parse('2026-10-14T15:00:00Z'),conversations:[],...worktreeRows[k]});}
+ if(url.pathname.endsWith('/worktrees/removal'))return json({path:url.searchParams.get('path'),branch:'feat/stock-sync',head:'abc',main:'/home/work/inventory',refused:null,ignored:['.env','data/exports/'],ignoredMore:0,rebuildable:3,started:[{id:'f00d0000-0000-4000-8000-0000000000aa',title:'Stock count export'}],check:'token-1'});
+ if(url.pathname==='/api/worktrees/remove'){let raw='';for await(const c of req)raw+=c;worktreeRemoved=JSON.parse(raw);delete worktreeRows['stock-sync'];return json({ok:true});}
  if(url.pathname.endsWith('/folders'))return json({active:'/home/work/inventory',activePath:'/home/work/inventory/src',repo:true,start:'/home/work',also:[{id:'f00d0000-0000-4000-8000-0000000000aa',title:'Stock count export'}],folders:[{path:'/home/work/inventory/src',root:'/home/work/inventory',branch:'feature/inventory',isWorktree:false,lastUsedAt:2,source:'edit'},{path:'/home/work/reports',root:'/home/work/reports',branch:'main',isWorktree:true,lastUsedAt:1,source:'cwd'}]});
  if(url.pathname.endsWith('/workspace'))return json({branch:'feature/inventory',total:2,checkedAt:Date.now(),files:[{path:'report.csv',status:' M',inspectable:true},{path:'.env',status:'??',inspectable:false}]});
  if(url.pathname.endsWith('/workspace/diff'))return json({text:url.searchParams.get('scope')==='staged'?'No staged diff for this file.':'-old quantity\n+new quantity\n+<script>unsafe-looking content is literal</script>'});
@@ -552,9 +557,23 @@ try{
  await clickControl(p,'[data-git-file="0"]');await p.waitForFunction(()=>document.querySelector('[data-git-diff] pre')?.textContent.includes('new quantity'));
  assert.equal(await p.$$eval('[data-git-diff] script',e=>e.length),0);await clickControl(p,'[data-scope="staged"]');await p.waitForFunction(()=>document.querySelector('[data-git-diff] pre')?.textContent.includes('No staged'));
  await p.screenshot({path:path.join(out,'workspace-desktop.png')});await scan('workspace-desktop');
+ // 1.98: worktrees sit below the changed files, grouped, and only a Ready row offers Remove.
+ await p.waitForFunction(()=>document.querySelectorAll('.git-tree').length===3&&!document.querySelector('[data-git-trees-progress]').textContent);
+ assert.deepEqual(await p.$$eval('.git-tree-group summary',e=>e.map(x=>x.textContent)),['In use (1)','Has work (1)','Ready to remove (1)']);
+ assert.equal(await p.$$eval('[data-git-tree-remove]',e=>e.length),1);assert.equal(await p.$eval('[data-git-tree-group="use"] a',e=>e.textContent),'Stock count export');
+ await p.$eval('[data-git-trees]',e=>e.scrollIntoView());await p.screenshot({path:path.join(out,'worktrees-1440.png')});await scan('worktrees-1440');await p.addScriptTag({path:path.join(repo,'node_modules/axe-core/axe.min.js')});assert.deepEqual(await p.evaluate(async sel=>{const result=await axe.run(sel);return result.violations.map(violation=>({id:violation.id,nodes:violation.nodes.map(node=>node.target)}));},'.git-trees'),[]);
  // Resizing preserves the open panel as a phone dialog rather than dropping its contents.
  await p.setViewport({width:390,height:844});await p.waitForSelector('.git-sheet[role="dialog"]');
  await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-git-folder]')).display!=='none');await p.screenshot({path:path.join(out,'git-folders-390.png')});await scan('git-folders-390');
+ // A phone collapses the groups, counts showing. The sheet names ignored files and where conversations go, then removal posts its check.
+ await p.waitForFunction(()=>document.querySelectorAll('.git-tree-group').length===3);
+ await p.$$eval('.git-tree-group',e=>e.forEach(d=>{d.open=false;}));await p.$eval('[data-git-trees]',e=>e.scrollIntoView());await p.screenshot({path:path.join(out,'worktrees-390.png')});await scan('worktrees-390');await p.addScriptTag({path:path.join(repo,'node_modules/axe-core/axe.min.js')});assert.deepEqual(await p.evaluate(async sel=>{const result=await axe.run(sel);return result.violations.map(violation=>({id:violation.id,nodes:violation.nodes.map(node=>node.target)}));},'.git-trees'),[]);
+ assert.ok((await p.$$eval('.git-tree-group summary',e=>e.map(x=>x.getBoundingClientRect().height))).every(h=>h>=44),'group rows are 44px on a phone');
+ await p.$eval('[data-git-tree-group="ready"]',d=>{d.open=true;});await clickControl(p,'[data-git-tree-remove]');await p.waitForSelector('.git-remove[role="dialog"]');
+ assert.match(await p.$eval('.git-remove-files',e=>e.textContent),/\.env/);assert.match(await p.$eval('.git-remove',e=>e.textContent),/carry on from your home folder: Stock count export/);
+ await p.screenshot({path:path.join(out,'worktree-remove-390.png')});await scan('worktree-remove-390');await p.addScriptTag({path:path.join(repo,'node_modules/axe-core/axe.min.js')});assert.deepEqual(await p.evaluate(async sel=>{const result=await axe.run(sel);return result.violations.map(violation=>({id:violation.id,nodes:violation.nodes.map(node=>node.target)}));},'.git-remove'),[]);
+ await clickControl(p,'[data-remove-yes]');await p.waitForSelector('.git-sheet[role="dialog"]');assert.deepEqual(worktreeRemoved,{path:'/home/work/trees/stock-sync',check:'token-1'});
+ await p.waitForFunction(()=>document.querySelectorAll('.git-tree-group').length===2);
  await p.keyboard.press('Escape');
  questionRequests=[{id:'request-1',blocking:true,questions:[{id:'format',header:'Format',question:'Which format should the report use?',options:[{label:'CSV',description:'For spreadsheets'},{label:'PDF',description:'For reading'}]}]}];
  rows[1].state={kind:'input',label:'Needs your answer',questions:1};

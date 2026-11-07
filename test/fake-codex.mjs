@@ -73,6 +73,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
     case 'thread/start':{const id=randomUUID();takeLock(id);if(p.cwd)fs.writeFileSync(path.join(root,id+'.cwd'),p.cwd);return reply(m.id,{thread:{id},model:'gpt-test',reasoningEffort:null});} // 1.86: remembers its folder for thread/read
     case 'thread/resume':
       if(!takeLock(p.threadId))return fail(m.id,`thread ${p.threadId} already has an active writer`);
+      if(calls)fs.appendFileSync(calls+'.resumes',JSON.stringify({threadId:p.threadId,cwd:p.cwd||null})+'\n');
       return reply(m.id,{model:'gpt-test',reasoningEffort:null,cwd:p.cwd||process.cwd()});
     case 'turn/start':{
       const text=p.input?.[0]?.text||'',turnId=randomUUID();

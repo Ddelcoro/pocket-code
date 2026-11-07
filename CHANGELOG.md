@@ -3,6 +3,16 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.98.0] — 2026-11-07 · build 191
+
+### Added
+- **Worktrees in the Git panel.** New `worktrees.mjs` lists every worktree of the repository in three groups: In use, Has work and Ready to remove, each row saying why. Ready needs proof: the branch is in the default branch, on a remote, or its pull request merged at exactly this commit. Anything unconfirmed stays under Has work. The list opens first and the groups fill in as folders are checked.
+- **Safe removal.** Remove appears only on a Ready row. Its sheet names ignored files that go with the folder and any conversation that started there. Pocket rechecks at confirm, refuses if anything changed, runs `git worktree remove` without `--force`, keeps the branch, and logs to `worktrees-removed.jsonl`. Owner sign-in only: the CLI token gets 401.
+- `GET /api/session/:id/worktrees`, `/worktrees/status`, `/worktrees/removal`; `POST /api/worktrees/remove`.
+
+### Fixed
+- **A conversation whose folder is gone carries on from home on every agent**, and says so once. Tested against the real CLIs: Claude Code resumes from another folder with history; Codex 0.166.0 kept the deleted folder and every command failed with `No such file or directory`, so Pocket now tells it to resume in home; OpenCode 1.19.4 loads in home. Kept-alive Codex and OpenRouter processes are moved out too. Side chat and Branch fall back the same way.
+
 ## [1.97.0] — 2026-11-07 · build 190
 
 ### Added

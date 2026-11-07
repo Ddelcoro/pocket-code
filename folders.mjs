@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const MAX_LINE = 8 * 1024 * 1024, PARSE_LINE = 512 * 1024, MAX_DIRS = 300, MAX_FILES = 200, SHOWN = 6, FRESH_MS = 3000;
+const MAX_LINE = 8 * 1024 * 1024, PARSE_LINE = 512 * 1024, MAX_DIRS = 300, MAX_FILES = 500, SHOWN = 6, FRESH_MS = 3000;
 const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const WORKDIR = /\bworkdir["']?\s*:\s*(["'`])(\/[^"'`\\\n]*)\1/g;
 const PATCHED = /\*\*\* (?:Update|Add|Delete) File: ([^\n\\]+?)\s*(?:\\n|\n|$)/g;

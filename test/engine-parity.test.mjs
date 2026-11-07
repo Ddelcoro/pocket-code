@@ -209,6 +209,22 @@ test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', {
       await s.idle(id);
     });
 
+    await t.test(`${engine}: a conversation whose folder is gone carries on from home, and says so once`, async () => {
+      const gone = path.join(s.home, 'gone-' + engine); fs.mkdirSync(gone);
+      const r0 = await s.call('/new', { provider: engine, cwd: gone, text: `parity gone ${engine}`, approvalMode: 'full' }); assert.equal(r0.status, 202, JSON.stringify(r0.body));
+      const id = r0.body.id; await s.idle(id);
+      fs.rmSync(gone, { recursive: true, force: true });
+      const first = await s.call(`/session/${s.e(id)}/message`, { text: `parity gone again ${engine}`, approvalMode: 'full' });
+      assert.equal(first.status, 202, JSON.stringify(first.body)); assert.equal(first.body.carriedOn, true, `${engine}: ${JSON.stringify(first.body)}`);
+      await s.idle(id);
+      assert.ok(s.prompts(engine).some(c => String(c.text).includes(`parity gone again ${engine}`)), `${engine} got the message`);
+      if (engine === 'claude') assert.ok(fs.readdirSync(path.join(s.dir, 'sessions')).length, 'the transcript is still there');
+      if (engine === 'codex') assert.ok(fs.readFileSync(path.join(s.dir, 'calls.resumes'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).some(c => c.threadId === id.slice(3) && c.cwd === s.home), 'Codex is told home: left alone it resumes in the deleted folder');
+      const second = await s.call(`/session/${s.e(id)}/message`, { text: `parity gone third ${engine}`, approvalMode: 'full' });
+      assert.equal(second.status, 202); assert.equal(second.body.carriedOn, undefined, 'it is said once');
+      await s.idle(id);
+    });
+
     await t.test(`${engine}: the Git panel, Results and Search answer`, async () => {
       if (!fs.existsSync(path.join(s.cwd, '.git'))) spawnSync('git', ['init', '-q', s.cwd]);
       const id = await s.start(engine, `parity panels ${engine}`);
