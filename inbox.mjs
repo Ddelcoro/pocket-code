@@ -75,7 +75,7 @@ function checkItems(raw, { strict }) {
 }
 
 // ---- 1.70: Inbox Watch settings. The worker normalizes again; here a bad value is refused with a reason the owner can read.
-export const WATCH = { periods: 12, every: 240, name: 40, model: 80, profileBytes: 24000, reasoning: ['default', 'low', 'medium', 'high', 'xhigh', 'max'], firstPass: ['jev', 'openai', 'both'], tidyEvery: [1, 2, 4, 8, 12, 24], rules: 8000 };
+export const WATCH = { periods: 12, every: 240, name: 40, model: 80, profileBytes: 24000, reasoning: ['default', 'low', 'medium', 'high', 'xhigh', 'max'], firstPass: ['jev', 'openai', 'both'], tidyEvery: [1, 2, 4, 8, 12, 24], rules: 8000, scope: ['all', 'inbox', 'inbox_labels'], scopeLabels: 20, scopeLabel: 60 };
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const isInt = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 export function checkWatch(raw, profile = null) {
@@ -121,6 +121,18 @@ export function checkWatch(raw, profile = null) {
     out.tidy = {};
     if ('enabled' in t) { if (typeof t.enabled !== 'boolean') throw bad('tidy.enabled is true or false.'); out.tidy.enabled = t.enabled; }
     if ('every' in t) { if (!WATCH.tidyEvery.includes(t.every)) throw bad(`Tidy runs every ${WATCH.tidyEvery.join(', ')} hours.`); out.tidy.every = t.every; }
+  }
+  if ('scope' in raw) { // 1.95: which mail the watcher reads at all: everything, the inbox, or the inbox plus chosen Gmail labels
+    const sc = raw.scope; if (!sc || typeof sc !== 'object') throw bad('scope is {mode, labels}.');
+    const mode = str(sc.mode, 20) || 'all';
+    if (!WATCH.scope.includes(mode)) throw bad(`scope.mode is one of ${WATCH.scope.join(', ')}.`);
+    let labels = [];
+    if ('labels' in sc) {
+      if (!Array.isArray(sc.labels) || sc.labels.some(x => typeof x !== 'string')) throw bad('scope.labels is a list of Gmail label names.');
+      labels = [...new Set(sc.labels.map(x => line(x, WATCH.scopeLabel)).filter(Boolean))];
+      if (labels.length > WATCH.scopeLabels) throw bad(`scope.labels: at most ${WATCH.scopeLabels} labels.`);
+    }
+    out.scope = { mode, labels };
   }
   if ('gmailLabel' in raw) { // 1.75: the Pocket Inbox label in Gmail, kept in step with this list both ways
     const g = raw.gmailLabel; if (!g || typeof g !== 'object' || typeof g.enabled !== 'boolean') throw bad('gmailLabel is {enabled: true or false}.');

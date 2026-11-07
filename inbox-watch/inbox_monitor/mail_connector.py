@@ -36,6 +36,8 @@ from email.utils import parseaddr, parsedate_to_datetime
 from pathlib import Path
 from typing import Callable
 
+from .schedule import scope_query
+
 PREFIX = "mcp__claude_ai_Gmail__"
 READ_TOOLS = [PREFIX + "search_threads", PREFIX + "get_thread", PREFIX + "get_message"]
 # 1.75.1: the Pocket Inbox label through Claude Code's connector. A run of its own allows these four and nothing else, and a
@@ -588,6 +590,7 @@ class ConnectorMail:
             self.fetch = FallbackConnector(self.fetch, self.transport(other, dict(mail.get("fallback") or {}), state_dir), log)
         self.baseline_query = baseline_query
         self.archive_query = archive_query
+        self.scope = scope_query(mail.get("scope"))  # 1.95: "", "in:inbox" or "{in:inbox label:…}"; every fetch for new mail stays inside it
         self.on_call = on_call
         self.search_cap = int(mail.get("search_cap", 400))
         self._cache: dict[str, list[dict]] = {}  # thread id -> messages read this run
@@ -648,7 +651,7 @@ class ConnectorMail:
         mailbox: BLIND_RUNS of those in a row fail the check (1.83.1), so Pocket shows it instead of reporting healthy."""
         now = int(time.time())
         since = max(int(str(cursor)[2:]) - OVERLAP_S, now - MAX_LOOKBACK_S)
-        query = f"after:{since} -in:spam -in:trash -in:draft"
+        query = self.scoped(f"after:{since} -in:spam -in:trash -in:draft")
         changed: set[str] = set()
         found, token = 0, None
         for _ in range(SEARCH_PAGES):
@@ -676,7 +679,7 @@ class ConnectorMail:
         if found:
             self._meta("blind_runs", 0)
             return None
-        probe, _ = self._page(PROBE_QUERY, PAGE, None, "fetch")
+        probe, _ = self._page(self.scoped(PROBE_QUERY), PAGE, None, "fetch")
         if not probe:
             self._meta("blind_runs", 0)
             return None
@@ -687,8 +690,23 @@ class ConnectorMail:
         return MailError(502, f"the mail search is blind: {date_form(query).split(' ')[0]} found nothing in {runs} checks "
                               f"while {PROBE_QUERY.split(' ')[0]} finds {len(probe)} thread(s); update Pocket Code, or report this if it is current")
 
+    def scoped(self, query: str) -> str:
+        return f"{query} {self.scope}".strip() if self.scope else query
+
+    def list_labels(self) -> list[str]:
+        """The owner's own Gmail labels (not the system ones), for the scope setting's picker."""
+        res = self.call([(PREFIX + "list_labels", {})], labels=True, allow={"names": [], "threads": [], "labels": []})["labels"]
+        if isinstance(res, MailError):
+            raise res
+        out = []
+        for x in _label_list(res):
+            name = str(x.get("name") or x.get("displayName") or "")
+            if name and str(x.get("type") or x.get("labelType") or "user").lower() != "system" and not name.isupper():
+                out.append(name)
+        return sorted(dict.fromkeys(out), key=str.lower)
+
     def baseline_threads(self, query: str | None = None, cap: int = 60) -> set[str]:
-        found = self._search(query or self.baseline_query, cap, "fetch")
+        found = self._search(self.scoped(query or self.baseline_query), cap, "fetch")
         now = int(time.time())
         self.db.executemany("insert or ignore into connector_seen(message_id,thread_id,seen_at) values(?,?,?)",
                             [(m["id"], t["id"], now) for t in found for m in t.get("messages") or [] if m.get("id")])
@@ -821,6 +839,7 @@ def main(argv: list[str] | None = None) -> int:
     before writing a config."""
     import argparse
     import tempfile
+
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["whoami"])
     ap.add_argument("--state", default=None)

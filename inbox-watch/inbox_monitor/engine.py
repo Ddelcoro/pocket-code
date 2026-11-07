@@ -102,7 +102,7 @@ def configure(cfg: cfgmod.Config) -> None:
     LINK_GENERIC.update(noise)
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
     g["DEFAULTS"] = schedmod.from_config(cfg.schedule, cfg.judge, cfg.quiet_hours, cfg.digest_hour, cfg.lookahead, cfg.firstpass, cfg.tidy,
-                                         cfg.gmail_label)
+                                         cfg.gmail_label, mail=cfg.mail)
     g["FIRSTPASS"] = FirstPass(cfg.firstpass, cfg.owner_name, cfg.firstpass.get("context") or
                                f"{cfg.owner_name} receives business email. An assistant reads every new email in the inbox and decides whether "
                                f"{cfg.owner_name} needs to know anything. Most mail is routine.", log)
@@ -215,13 +215,14 @@ def load_settings(fetch: bool = True) -> None:
 
 def gmail_client():
     """The mail source: Gmail's API (`provider = "gmail"`) or the agent's own Gmail connector (`provider = "connector"`)."""
+    mail = {**CFG.mail, "scope": (SETTINGS or DEFAULTS).get("scope") or {}}  # 1.95: what the watcher reads (Pocket's setting wins over the TOML)
     if CFG.mail.get("provider", "gmail") == "connector":
         def on_call(purpose: str, fetcher, n: int) -> None:
             if USAGE_DB is not None:
                 record_call(USAGE_DB, purpose, fetcher, 0, n, bool(getattr(fetcher, "last_usage", None)), CURRENT_RUN)
-        return ConnectorMail(CFG.mail, MAILBOX, BASELINE_QUERY, ARCHIVE_QUERY, STATE, on_call, log)
+        return ConnectorMail(mail, MAILBOX, BASELINE_QUERY, ARCHIVE_QUERY, STATE, on_call, log)
     from .mail_gmail import Gmail
-    return Gmail(CFG.mail, MAILBOX, BASELINE_QUERY, ARCHIVE_QUERY)
+    return Gmail(mail, MAILBOX, BASELINE_QUERY, ARCHIVE_QUERY)
 
 
 MAX_THREADS_PER_RUN = 20
@@ -1704,6 +1705,32 @@ def mail_since(store: Store, tid: str, since: str | None, fresh: set[str]) -> bo
     return store.db.execute(q, (tid, tid, since, tid, since)).fetchone() is not None
 
 
+LABELS_REFRESH_S = 24 * 3600
+
+
+def label_names(store: Store, gmail=None) -> list[str]:
+    """The owner's own Gmail labels for the scope setting's picker (1.95): asked of Gmail once a day, remembered between, and
+    never a reason for a check to fail."""
+    try:
+        cached = json.loads(store.get("label_names") or "{}")
+    except ValueError:
+        cached = {}
+    fresh = cached.get("at") and (now_utc() - dt.datetime.fromisoformat(cached["at"])).total_seconds() < LABELS_REFRESH_S
+    if fresh or MODE.replay:
+        return list(cached.get("names") or [])
+    try:
+        g = gmail or gmail_client()
+        names = g.list_labels() if hasattr(g, "list_labels") else []
+        store.set("label_names", json.dumps({"at": iso(), "names": names[:200]}))
+        store.commit()
+        return names[:200]
+    except Exception as ex:  # noqa: BLE001
+        log(f"labels: could not list the Gmail labels ({ex}); the scope picker keeps the last list")
+        store.set("label_names", json.dumps({"at": iso(), "names": cached.get("names") or []}))  # try again tomorrow, not every minute
+        store.commit()
+        return list(cached.get("names") or [])
+
+
 def label_status(store: Store, gmail=None) -> dict:
     """{available, name, reason}: can this watcher write the label (asked of Gmail now and then, remembered between)."""
     out = {"name": label_name(), "available": None, "reason": None}
@@ -2676,7 +2703,7 @@ def profile(store: Store) -> dict:
     every, period = schedmod.interval_at(SETTINGS, now)
     nxt = schedmod.next_check(SETTINGS, now, last)
     return {"version": 1, "engine": f"inbox-monitor {__version__}", "timezone": CFG.timezone, "defaults": DEFAULTS,
-            "options": {**judge_options(), "gmailLabel": label_status(store)},
+            "options": {**judge_options(), "gmailLabel": label_status(store), "labels": label_names(store)},
             "applied": {"from": SETTINGS_FROM, "revision": SETTINGS_REVISION},
             "rules": {"text": rules_text()[:schedmod.RULES_MAX], "max": schedmod.RULES_MAX},
             "status": {"paused": SETTINGS["paused"], "every": every, "period": period, "lastCheckAt": iso(last) if last else None,

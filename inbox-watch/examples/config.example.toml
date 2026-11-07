@@ -31,6 +31,9 @@ lookahead = { morning = [8, 12], evening = [17, 22] }   # the two look-ahead win
 # prompts_dir = "prompts"              # override the shipped prompts
 
 [mail]
+# scope = "all"                        # what the watcher reads (1.95): "all" = every thread but spam, trash and drafts (the default);
+# scope = "inbox"                      # "inbox" = only threads in the Gmail inbox; "inbox_labels" = the inbox plus these labels.
+# scope_labels = ["Clients", "Ultra/Ask first"]   # Also a Pocket setting (Inbox Watch → What it reads), which wins over this file.
 provider = "gmail"
 auth = "oauth"                         # "oauth": your own consent (run `inbox-monitor gmail-auth` once)
 oauth_client_file = "google-oauth-client.json"   # an OAuth client of type "Desktop app" from Google Cloud

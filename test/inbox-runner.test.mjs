@@ -212,7 +212,7 @@ test('1.81: a fallback agent still on the old account is dropped; one on the new
   await r.runner.step();
   const cfg = cfgOf(r);
   assert.doesNotMatch(cfg, /fallback_agent|\[mail\.fallback\]/);
-  assert.match(cfg, /\[mail\]\nprovider = .*\nagent = "claude"\nbin = .*\nmodel = "haiku"\n\n\[judge\]/);
+  assert.match(cfg, /\[mail\]\nprovider = .*\nagent = "claude"\nbin = .*\nmodel = "haiku"\nscope = "all".*\n\n\[judge\]/); // 1.95: the scope line closes [mail]; no fallback_agent, no [mail.fallback]
   assert.equal(r.runner.status().fallback, null);
   const k = rig({ codex: true });
   await k.runner.step(); await k.runner.step();

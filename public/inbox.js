@@ -358,6 +358,12 @@ async function inboxWatchSheet(){
   ${s.gmailLabel?(()=>{const gl=opts.gmailLabel||{},name=esc(gl.name||'Pocket Inbox'),off=gl.available===false;return `<div class="title-settings model-offer" role="group" aria-labelledby="w-label-h"><p class="vault-set-head" id="w-label-h">Your list in Gmail</p>
    <button class="opt" id="w-label" aria-pressed="${Boolean(s.gmailLabel.enabled)}"${off?' aria-describedby="w-label-off"':''}><span class="dot${s.gmailLabel.enabled?' on':''}"></span><span>Keep a ${name} label in Gmail<span class="sub">Everything on this list carries the label in Gmail and stays in your inbox. Give an email the label and it comes here with a summary; take it off and it leaves this list. Finish one here and its email is archived in Gmail.</span></span></button>
    ${off?`<p class="title-note" id="w-label-off">Inbox Watch can only read this mailbox, so it can’t add the label yet: ${esc(gl.reason||'it has no Gmail write access')}.</p>`:''}</div>`;})():''}
+  ${s.scope?(()=>{const sc=s.scope,known=Array.isArray(opts.labels)?opts.labels:[],all=[...new Set([...known,...(sc.labels||[])])];return `<div class="title-settings model-offer" role="group" aria-labelledby="w-scope-h"><p class="vault-set-head" id="w-scope-h">What it reads</p>
+   <p class="title-note">Which mail Inbox Watch looks at. Everything is every thread but spam, trash and drafts, so mail your Gmail filters archive or file away is judged too. Inbox only reads what is in your Gmail inbox. Inbox and labels adds the labels you pick. An email you label ${esc((opts.gmailLabel||{}).name||'Pocket Inbox')} always joins the check.</p>
+   ${watchSelect('w-scope','Read',['all','inbox','inbox_labels'],sc.mode||'all',v=>({all:'Everything',inbox:'Inbox only',inbox_labels:'Inbox and these labels'})[v])}
+   <div class="watch-labels" id="w-scope-labels"${(sc.mode||'all')==='inbox_labels'?'':' hidden'}><p class="title-note" id="w-scope-labels-lead">${known.length?'Your Gmail labels. Pick the ones to read.':'Type a Gmail label name and press Add; Inbox Watch lists your labels here once it has read them.'}</p>
+    <div class="watch-days watch-label-chips" role="group" aria-labelledby="w-scope-labels-lead">${all.map(n=>`<button type="button" class="chip" data-scope-label="${esc(n)}" aria-pressed="${(sc.labels||[]).includes(n)}">${esc(n)}</button>`).join('')}</div>
+    <div class="inbox-tools-row watch-label-add"><input type="text" class="watch-name" id="w-scope-add" placeholder="Another label name" aria-label="Add a Gmail label by name" maxlength="60"><button type="button" class="chip" id="w-scope-add-btn">${IC.plus}Add</button></div></div></div>`;})():''}
   <div class="title-settings model-offer" role="group" aria-labelledby="w-sched-h"><p class="vault-set-head" id="w-sched-h">Schedule</p>
    <p class="title-note">How often it checks your mail. Inside a period, that period’s interval applies; the rest of the time, this one. When periods overlap, the first listed wins. <strong>Check now</strong> in the Inbox checks at any time, so Don’t check means on demand only.${esc(tz)}</p>
    ${watchSelect('w-every','The rest of the time',everyChoices,s.every,watchEvery)}
@@ -400,6 +406,13 @@ async function inboxWatchSheet(){
  $w('#w-tidy')?.addEventListener('click',e=>{s.tidy.enabled=!s.tidy.enabled;e.currentTarget.setAttribute('aria-pressed',String(s.tidy.enabled));e.currentTarget.querySelector('.dot').classList.toggle('on',s.tidy.enabled);});
  $w('#w-label')?.addEventListener('click',e=>{s.gmailLabel.enabled=!s.gmailLabel.enabled;e.currentTarget.setAttribute('aria-pressed',String(s.gmailLabel.enabled));e.currentTarget.querySelector('.dot').classList.toggle('on',s.gmailLabel.enabled);});
  $w('#w-fp')?.addEventListener('click',e=>{s.firstPass.enabled=!s.firstPass.enabled;e.currentTarget.setAttribute('aria-pressed',String(s.firstPass.enabled));e.currentTarget.querySelector('.dot').classList.toggle('on',s.firstPass.enabled);});
+ if(s.scope){ // 1.95: the scope's mode shows or hides the label chips; a chip toggles a label; Add puts a typed name in as a pressed chip
+  $w('#w-scope')?.addEventListener('change',e=>{s.scope.mode=e.target.value;const box=$w('#w-scope-labels');if(box)box.hidden=s.scope.mode!=='inbox_labels';});
+  const chips=$w('#w-scope-labels');
+  chips?.addEventListener('click',e=>{const b=e.target.closest('[data-scope-label]');if(!b)return;const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',String(on));});
+  const addLabel=()=>{const inp=$w('#w-scope-add'),name=inp.value.replace(/\s+/g,' ').trim().slice(0,60);if(!name)return;const row=$w('.watch-label-chips');if(![...row.children].some(c=>c.dataset.scopeLabel===name))row.insertAdjacentHTML('beforeend',`<button type="button" class="chip" data-scope-label="${esc(name)}" aria-pressed="true">${esc(name)}</button>`);else row.querySelector(`[data-scope-label="${CSS.escape(name)}"]`).setAttribute('aria-pressed','true');inp.value='';};
+  $w('#w-scope-add-btn')?.addEventListener('click',addLabel);$w('#w-scope-add')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addLabel();}});
+ }
  $w('#w-pause').onclick=e=>{s.paused=!s.paused;e.currentTarget.setAttribute('aria-pressed',String(s.paused));e.currentTarget.querySelector('.dot').classList.toggle('on',s.paused);};
  const hourVal=id=>{const v=$w(id).value;return v==='off'?null:Number(v);};
  const collect=()=>{
@@ -408,6 +421,7 @@ async function inboxWatchSheet(){
    lookahead:{morning:hourVal('#w-la-morning'),evening:hourVal('#w-la-evening')},models:structuredClone(s.models||{})};
   if(rulesBox)out.rules=rulesBox.value;
   if(s.gmailLabel)out.gmailLabel={enabled:Boolean(s.gmailLabel.enabled)};
+  if(s.scope)out.scope={mode:$w('#w-scope')?.value||s.scope.mode||'all',labels:[...sh.querySelectorAll('[data-scope-label][aria-pressed="true"]')].map(b=>b.dataset.scopeLabel)};
   if(s.tidy)out.tidy={enabled:Boolean(s.tidy.enabled),every:Number($w('#w-tidy-every')?.value||s.tidy.every)};
   if(s.firstPass)out.firstPass={enabled:Boolean(s.firstPass.enabled),provider:$w('#w-fp-provider')?.value||s.firstPass.provider,threshold:Number($w('#w-fp-threshold')?.value||s.firstPass.threshold)};
   sh.querySelectorAll('#w-models [data-job]').forEach(row=>{out.models[row.dataset.job]={model:row.querySelector('[data-model]').value,reasoning:row.querySelector('[data-reasoning]').value};});

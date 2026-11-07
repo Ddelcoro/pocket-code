@@ -1921,6 +1921,12 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 .inbox-item-state { font-size: 13.5px; font-weight: 600; color: var(--clay); margin-right: 4px; }
 .inbox-item-card.state-resolved, .inbox-item-card.state-not_useful { opacity: .72; }
 .inbox-rest { margin-top: 10px; color: var(--dim); font-size: 13.5px; }
+.watch-labels { margin: 6px 14px 0; } /* 1.95: the scope's label chips */
+.watch-labels[hidden] { display: none; }
+.watch-label-chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: none; grid-template-columns: none; }
+.watch-label-chips .chip { padding: 4px 10px; font-weight: 500; }
+.watch-label-add { margin-top: 8px; }
+.watch-label-add .watch-name { flex: 1; }
 .inbox-item-listed { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; } /* 1.95: a line already on the list links to its entry */
 .inbox-item-listed a { color: var(--clay); font-weight: 600; text-decoration: none; }
 .inbox-card .home-card-what { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -106,6 +106,26 @@ def test_first_pass_settings():
     assert S.options("claude", [], True)["firstPass"]["available"] is True
 
 
+def test_scope_settings():
+    # 1.95 (Damon and Brad): what the watcher reads. The TOML gives the default; Pocket's {mode, labels} wins; bad parts keep the default.
+    assert "scope" not in BASE, "no [mail] table, no setting"
+    b = S.from_config({}, {"model": "sonnet"}, (22, 8), 8, {}, mail={"provider": "connector"})
+    assert b["scope"] == {"mode": "all", "labels": []}
+    b = S.from_config({}, {"model": "sonnet"}, (22, 8), 8, {}, mail={"scope": "inbox_labels", "scope_labels": ["Clients", " Ultra/Ask first ", "Clients", 7]})
+    assert b["scope"] == {"mode": "inbox_labels", "labels": ["Clients", "Ultra/Ask first"]}
+    assert S.normalize({"scope": {"mode": "inbox"}}, b)["scope"] == {"mode": "inbox", "labels": ["Clients", "Ultra/Ask first"]}
+    assert S.normalize({"scope": {"mode": "archive", "labels": "x"}}, b)["scope"] == b["scope"], "bad values keep the defaults"
+    assert S.normalize({"scope": "inbox", "scope_labels": ["A"]}, b)["scope"] == {"mode": "inbox", "labels": ["A"]}, "the TOML form"
+    assert S.normalize({"scope": {"mode": "inbox_labels", "labels": [f"L{i}" for i in range(30)]}}, b)["scope"]["labels"] == [f"L{i}" for i in range(20)]
+    assert "scope" not in S.normalize({"scope": {"mode": "inbox"}}, BASE)
+    assert S.describe(S.normalize({"scope": {"mode": "inbox"}}, b)) == "every 5 min; inbox only"
+    assert S.describe(b) == "every 5 min; inbox + 2 label(s)"
+    assert S.scope_query(None) == "" and S.scope_query({"mode": "all"}) == "" and S.scope_query({"mode": "inbox"}) == "in:inbox"
+    assert S.scope_query({"mode": "inbox_labels", "labels": []}) == "in:inbox"
+    assert S.scope_query({"mode": "inbox_labels", "labels": ["Clients", "Ultra/Ask first", "Meeting Notes"]}) == "{in:inbox label:Clients label:Ultra-Ask-first label:Meeting-Notes}"
+    assert S.options("claude", [])["scopeModes"] == ["all", "inbox", "inbox_labels"]
+
+
 def test_tidy_settings():
     b = S.from_config({}, {"model": "sonnet"}, (22, 8), 8, {}, {}, {"enabled": True, "every_hours": 2})
     assert b["tidy"] == {"enabled": True, "every": 2}

@@ -225,6 +225,31 @@ def test_time_bounds_reach_the_connector_as_dates():
     assert C.date_form("newer_than:2d before:2026/10/30 after:12345") == "newer_than:2d before:2026/10/30 after:12345", "only Unix seconds change"
 
 
+def test_the_scope_reaches_every_fetch():
+    """1.95: inbox only, or inbox plus labels, bounds the window search, the baseline and the blind probe alike; the archive search is not bounded."""
+    b = Box()
+    now = int(time.time())
+    b.data["threads"] = [{"id": "t1", "messages": [msg("m1", "t1", now - 60)]}]
+    b.save()
+    m = b.mail(scope={"mode": "inbox"})
+    m.changed_threads(f"t:{now - 300}")
+    assert searches(b)[-1]["query"].endswith(" -in:spam -in:trash -in:draft in:inbox"), searches(b)[-1]["query"]
+    m.baseline_threads()
+    assert searches(b)[-1]["query"] == "newer_than:2d in:inbox", searches(b)[-1]["query"]
+    m.search_ids("from:pat@vendor.example", 10)
+    assert "in:inbox" not in searches(b)[-1]["query"], "an archive or research search is not the scope's business"
+    m = b.mail(scope={"mode": "inbox_labels", "labels": ["Clients", "Ultra/Ask first"]})
+    m.baseline_threads("newer_than:1d")
+    assert searches(b)[-1]["query"] == "newer_than:1d {in:inbox label:Clients label:Ultra-Ask-first}", searches(b)[-1]["query"]
+    b.data["threads"] = []
+    b.data["date_blind"] = True
+    b.save()
+    m.changed_threads(f"t:{now - 300}")
+    probe = searches(b)[-1]["query"]
+    assert probe.startswith("newer_than:1d ") and probe.endswith(" {in:inbox label:Clients label:Ultra-Ask-first}"), probe
+    assert b.mail().scope == "" and "in:inbox" not in (b.mail().baseline_threads() or searches(b)[-1]["query"])
+
+
 def test_paging_stops_at_mail_already_seen():
     """The date window holds a day or two of seen mail; pages are newest first and stop once a page has nothing unseen."""
     b = Box()

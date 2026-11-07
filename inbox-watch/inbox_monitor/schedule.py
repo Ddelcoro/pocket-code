@@ -24,6 +24,10 @@ The shape (JSON in Pocket, the same keys in the TOML as snake_case where noted):
                 off what has been resolved or handled (TOML [tidy] enabled, every_hours)
   gmailLabel    {enabled}: the owner's open Inbox entries carry a "Pocket Inbox" label in Gmail; labelling a thread there puts it on
                 the list, taking the label off takes it off (TOML [gmail_label] enabled, name; on by default; needs gmail.modify)
+  scope         {mode: all | inbox | inbox_labels, labels: [Gmail label names]}: which mail the watcher reads at all (1.95, Damon and
+                Brad). "all" is every thread but spam, trash and drafts (the behaviour before 1.95); "inbox" only threads in the
+                Gmail inbox; "inbox_labels" the inbox plus threads under the named labels. Mail outside the scope is never fetched
+                or judged; a thread the owner labels Pocket Inbox still joins the check. (TOML [mail] scope, scope_labels)
 """
 from __future__ import annotations
 
@@ -38,6 +42,40 @@ MAX_PERIODS = 12
 LOOKAHEAD_HOURS = 4
 SLACK_S = 30  # a tick a few seconds early still counts, so a 5-minute interval is not stretched to 6
 TIDY_EVERY = [1, 2, 4, 8, 12, 24]
+SCOPE_MODES = ["all", "inbox", "inbox_labels"]
+SCOPE_LABELS_MAX, SCOPE_LABEL_CHARS = 20, 60
+
+
+def _scope(raw, cur: dict) -> dict:
+    """A scope from Pocket or the TOML ({mode, labels}, or the TOML's scope = "inbox" with scope_labels = [...]); bad parts keep `cur`."""
+    out = {"mode": cur.get("mode", "all"), "labels": list(cur.get("labels", []))}
+    if isinstance(raw, str):
+        raw = {"mode": raw}
+    if not isinstance(raw, dict):
+        return out
+    if raw.get("mode") in SCOPE_MODES:
+        out["mode"] = raw["mode"]
+    if isinstance(raw.get("labels"), list):
+        names = [" ".join(str(x).split())[:SCOPE_LABEL_CHARS] for x in raw["labels"] if isinstance(x, str) and x.strip()]
+        out["labels"] = list(dict.fromkeys(names))[:SCOPE_LABELS_MAX]
+    return out
+
+
+def label_term(name: str) -> str:
+    """A Gmail label name as a search term: spaces and nesting slashes become hyphens (label:Clients/ACME -> label:clients-acme)."""
+    return "-".join(part for part in name.replace("/", " ").split() if part)
+
+
+def scope_query(scope: dict | None) -> str:
+    """The search fragment that keeps a fetch inside the scope: "" for everything, "in:inbox", or "{in:inbox label:a label:b}"."""
+    scope = scope or {}
+    mode = scope.get("mode", "all")
+    if mode == "inbox":
+        return "in:inbox"
+    if mode == "inbox_labels":
+        terms = ["in:inbox"] + [f"label:{label_term(n)}" for n in scope.get("labels", []) if label_term(n)]
+        return terms[0] if len(terms) == 1 else "{" + " ".join(terms) + "}"
+    return ""
 RULES_MAX = 8000
 TIME_RX = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
@@ -144,6 +182,11 @@ def normalize(raw: dict | None, base: dict, models: list[str] | None = None) -> 
             pass
     if isinstance(raw.get("rules"), str):
         out["rules"] = raw["rules"][:RULES_MAX]
+    if "scope" in out and ("scope" in raw or "scope_labels" in raw):
+        sc = raw.get("scope")
+        if isinstance(sc, str):  # the TOML form: scope = "inbox_labels", scope_labels = ["Clients"]
+            sc = {"mode": sc, **({"labels": raw["scope_labels"]} if isinstance(raw.get("scope_labels"), list) else {})}
+        out["scope"] = _scope(sc, out["scope"])
     td = raw.get("tidy")
     if isinstance(td, dict) and "tidy" in out:
         if "enabled" in td:
@@ -165,7 +208,7 @@ def normalize(raw: dict | None, base: dict, models: list[str] | None = None) -> 
 
 
 def from_config(sched: dict, judge: dict, quiet_hours, digest_hour: int, lookahead: dict, firstpass: dict | None = None,
-                tidy: dict | None = None, gmail_label: dict | None = None) -> dict:
+                tidy: dict | None = None, gmail_label: dict | None = None, mail: dict | None = None) -> dict:
     """The defaults: what the config file says, in the settings shape."""
     la_judge = judge.get("lookahead") if isinstance(judge.get("lookahead"), dict) else {}
     base = {
@@ -187,6 +230,8 @@ def from_config(sched: dict, judge: dict, quiet_hours, digest_hour: int, lookahe
         base["tidy"] = {"enabled": bool(tidy.get("enabled", False)), "every": every if every in TIDY_EVERY else 2}
     if gmail_label is not None:
         base["gmailLabel"] = {"enabled": bool(gmail_label.get("enabled", True))}
+    if mail is not None:  # 1.95: [mail] scope = "all" | "inbox" | "inbox_labels", scope_labels = [...]
+        base["scope"] = _scope({"mode": mail.get("scope", "all"), "labels": mail.get("scope_labels", [])}, {"mode": "all", "labels": []})
     return normalize({"periods": sched.get("period", sched.get("periods", []))}, base)
 
 
@@ -263,6 +308,11 @@ def describe(settings: dict) -> str:
     td = settings.get("tidy")
     if td and td.get("enabled"):
         parts.append(f"tidy every {td['every']} h")
+    sc = settings.get("scope") or {}
+    if sc.get("mode") == "inbox":
+        parts.append("inbox only")
+    elif sc.get("mode") == "inbox_labels":
+        parts.append(f"inbox + {len(sc.get('labels', []))} label(s)")
     return "; ".join(parts)
 
 
@@ -279,4 +329,5 @@ def options(judge_kind: str, cfg_models: list[str], firstpass_available: bool = 
     return {"every": EVERY_CHOICES, "models": models, "reasoning": [{"id": i, "label": l} for i, l in REASONING], "judge": judge_kind,
             "maxPeriods": MAX_PERIODS,
             "tidyEvery": TIDY_EVERY,
+            "scopeModes": SCOPE_MODES, "scopeLabelsMax": SCOPE_LABELS_MAX,
             "firstPass": {"available": firstpass_available, "providers": [{"id": i, "label": l} for i, l in PROVIDERS], "thresholds": THRESHOLDS}}
