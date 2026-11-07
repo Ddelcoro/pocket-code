@@ -3,7 +3,7 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
-## [1.95.0] — 2026-11-07 · build 188
+## [1.95.0] — 2026-11-07 · build 189
 
 Requested by Damon (2026-11-07): a RingCentral text from a client was judged a digest line, so it never appeared in his Pocket Inbox on its own; when he opened the morning digest it read as one paragraph, and there was nothing he could press on any line to say "this should have been an alert".
 

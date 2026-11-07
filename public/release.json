@@ -1,6 +1,6 @@
 {
  "version": "1.95.0",
- "assetV": 188,
+ "assetV": 189,
  "notes": [
   "The morning digest is readable and each line has its own buttons. The digest used to open as one block of text; it now shows each line as a card under its heading (Worth knowing, Held overnight, and so on), and the whole digest is shown rather than cut off after 2,000 characters. Under each card: Start a conversation, which opens a new conversation briefed with that one story and teaches Inbox Watch nothing; Alert me, which makes that story an alert of its own right away and teaches Inbox Watch to alert on that kind of email from now on; Resolved and Not useful, which land on that story rather than on the whole digest; and Gmail. Undo takes any of them back. A line whose story is already an open alert on your list is not a new card: it appears under Already on your list as a link to that entry. Requested by Damon after a client's text message was filed for the digest instead of alerting him. And Inbox Watch has a new setting, What it reads: Everything (as before), Inbox only, or Inbox and the Gmail labels you pick, so mail your filters archive or file away can stay out of your alerts and digest. Requested by Damon and Brad.",
   "Pin and unpin in one click. Every conversation in the list now has a pin beside its ⋯ button: faint gray on an unpinned conversation (click it to pin) and orange on a pinned one (click it to unpin). Pin conversation is also the first choice in Conversation options now, instead of near the bottom. Requested by Damon.",

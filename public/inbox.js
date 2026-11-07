@@ -343,6 +343,7 @@ async function inboxWatchSheet(){
  let s=structuredClone(w.settings||p?.defaults||null);
  if(!s){holder.querySelector('[role=status]').textContent=watchStatus(w);return;}
  s.periods ||= [];
+ for(const k of ['scope','tidy','firstPass','gmailLabel'])if(p?.defaults?.[k]&&!s[k])s[k]=structuredClone(p.defaults[k]); // 1.95: a group the watcher offers that your saved settings predate (the scope setting for everyone who saved before it existed)
  // 1.73: the rules box shows the watcher's file (it may have learned lines since), unless a save of yours has not reached it yet
  const rulesText=typeof w.settings?.rules==='string'&&p?.applied?.revision!==w.revision?w.settings.rules:(p?.rules?.text||'');
  const hours=[...Array(24).keys()],tz=p?.timezone&&p.timezone!==Intl.DateTimeFormat().resolvedOptions().timeZone?` Times are ${p.timezone.split('/').pop().replace(/_/g,' ')} time.`:'';
