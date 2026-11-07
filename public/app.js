@@ -827,6 +827,7 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
     <div class="title-settings"><label class="voice-field">Open files and links<select id="s-documents-open"><option value="tab">As a tab, like a conversation</option><option value="beside">Beside the conversation (from a pane: a new pane to its left)</option><option value="window">In a new browser window</option></select></label><p class="title-note">A link in a conversation to one of your files, projects or conversations opens the same way. A link to an outside website opens in your browser.</p></div>
     <button class="opt" id="s-autokeep" disabled aria-pressed="false"><span class="dot"></span><span>Keep files from replies<span class="sub" id="s-autokeep-state">Loading…</span></span></button>
     <button class="opt" id="s-tasks" disabled aria-pressed="false"><span class="dot"></span><span>Tasks<span class="sub" id="s-tasks-state">Loading the Tasks setting…</span></span></button>
+    ${assistantMode() ? '' : '<button class="opt" id="s-coordination" disabled aria-pressed="false"><span class="dot"></span><span>Coordination<span class="sub" id="s-coordination-state">Loading the Coordination setting…</span></span></button>'}
     <button class="opt" id="s-inbox" disabled aria-pressed="false"><span class="dot"></span><span>Inbox Watch<span class="sub" id="s-inbox-state">Loading the Inbox setting…</span></span></button>
     <button class="opt" id="s-inbox-watch" hidden>${IC.sliders}<span>${assistantMode() ? 'Inbox Watch schedule' : 'Schedule, models and cost'}<span class="sub">${assistantMode() ? 'When it checks your mail, quiet hours, the digest and look-ahead' : 'When Inbox Watch checks your mail, which models judge it, what it cost each day'}</span></span></button>
     <button class="opt" id="s-vault" disabled aria-pressed="false"><span class="dot"></span><span>Vault<span class="sub" id="s-vault-state">Loading the Vault setting…</span></span></button>
@@ -1292,6 +1293,23 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
       document.querySelectorAll('.session-home, aside.rail').length && route();
     } catch (err) { toast('Could not save: ' + (err.message || 'error')); btn.disabled = false; }
   };
+  // 1.99: Coordination, the same way; Assistant mode has no such row.
+  const paintCoordSetting = () => {
+    const btn = sh.querySelector('#s-coordination'); if (!btn || !srv) return;
+    const on = Boolean(srv.coordination);
+    btn.disabled = false; btn.setAttribute('aria-pressed', String(on)); btn.querySelector('.dot').classList.toggle('on', on);
+    sh.querySelector('#s-coordination-state').textContent = on ? 'On: conversations can claim staging or a deploy, wait their turn, and show here who holds what' : 'Off. Turn on so conversations can claim staging or a deploy and wait their turn';
+  };
+  const coordBtn = sh.querySelector('#s-coordination');
+  if (coordBtn) coordBtn.onclick = async e => {
+    const btn = e.currentTarget; if (!srv) return; btn.disabled = true;
+    try {
+      srv = await api('/settings', { method: 'POST', body: JSON.stringify({ coordination: !srv.coordination }), signal: AbortSignal.timeout(8000) });
+      window.pocketFeatures = { ...(window.pocketFeatures || {}), coordination: Boolean(srv.coordination) };
+      paintCoordSetting(); toast(srv.coordination ? 'Coordination is on' : 'Coordination is off');
+      document.querySelectorAll('.session-home, aside.rail').length && route();
+    } catch (err) { toast('Could not save: ' + (err.message || 'error')); btn.disabled = false; }
+  };
   // 1.39: the Vault, the same way. 1.44: switching it on with no key yet makes one (and shows the recovery key);
   // a Vault whose key is missing here is restored from the recovery key, never recreated.
   const paintVaultSetting = () => {
@@ -1396,7 +1414,7 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
     try {
       srv = await api('/settings', {signal:AbortSignal.timeout(8000)});
       if (!sh.isConnected) return;
-      paintTitles(); paintNotifySettings(); paintModelOffer(); paintContext(); paintTrusted(); paintRouter(); paintAccess(); paintProjectsSetting(); paintDocumentsSetting(); paintTasksSetting(); paintInboxSetting(); paintVaultSetting(); paintSecretsSetting(); paintFeaturesNote();
+      paintTitles(); paintNotifySettings(); paintModelOffer(); paintContext(); paintTrusted(); paintRouter(); paintAccess(); paintProjectsSetting(); paintDocumentsSetting(); paintTasksSetting(); paintCoordSetting(); paintInboxSetting(); paintVaultSetting(); paintSecretsSetting(); paintFeaturesNote();
       btn.disabled = false; btn.setAttribute('aria-pressed', String(Boolean(srv.titleSync)));
       btn.querySelector('.dot').classList.toggle('on', Boolean(srv.titleSync));
       sh.querySelector('#s-sync-state').textContent = "Conversation names follow Claude Code's titles, and renames here show there too";
@@ -1728,7 +1746,7 @@ function paintAssistantHome() {
   if (recent) {
     const beside = isWide() && railOpen() && !SOLO;
     const latest = rows.slice().sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0)).slice(0, 5);
-    const links = [documentsOn() ? '<a class="chip" href="#/documents">Files</a>' : '', tasksOn() ? '<a class="chip" href="#/tasks">Tasks</a>' : '', projectsOn() ? '<a class="chip" href="#/projects">Projects</a>' : '', vaultOn() ? '<a class="chip" href="#/vault">Vault</a>' : '', inboxOn() ? '<a class="chip" href="#/inbox" data-inbox-home>Inbox</a>' : ''].join('');
+    const links = [documentsOn() ? '<a class="chip" href="#/documents">Files</a>' : '', tasksOn() ? '<a class="chip" href="#/tasks">Tasks</a>' : '', projectsOn() ? '<a class="chip" href="#/projects">Projects</a>' : '', vaultOn() ? '<a class="chip" href="#/vault">Vault</a>' : '', inboxOn() ? '<a class="chip" href="#/inbox" data-inbox-home>Inbox</a>' : '', coordOn() ? '<a class="chip" href="#/coordination">Coordination</a>' : ''].join('');
     recent.innerHTML = (beside || !latest.length ? '' : `<h2 class="home-h" id="home-recent-h">Recent</h2><div class="home-list">${latest.map(homeRowHTML).join('')}</div><a class="home-all" href="#/all">See all conversations</a>`)
       + (links ? `<nav class="home-links" aria-label="Your things">${links}</nav>` : '');
     if (beside || !latest.length) { recent.removeAttribute('aria-labelledby'); recent.setAttribute('aria-label', 'Your things'); recent.hidden = !links; }
@@ -1740,6 +1758,7 @@ function paintSessionPanels() {
   paintWorkspaceFilters();
   paintWorkspaceDensity();
   document.querySelectorAll('[data-session-summary]').forEach(el => { el.textContent = sessionSummary(); });
+  document.querySelectorAll('[data-session-held]').forEach(el => { el.textContent = coordHeldLine(); el.hidden = !el.textContent; }); // 1.99: nothing shows on a quiet day
   document.querySelectorAll('[data-session-filters]').forEach(el => {
     const focused = el.contains(document.activeElement) ? document.activeElement.dataset.filter : null;
     el.innerHTML = filterButtons(el.dataset.filterKeys?.split(' '));
@@ -1775,7 +1794,7 @@ async function fetchSessionList() {
   const r = await fetch('/api/sessions?limit=200&statusCheck=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(8000),
     headers: sessionsEtag && allSessions.length ? { 'if-none-match': sessionsEtag } : {} });
   if (r.status === 401) { sessionsEtag = ''; renderLogin(); throw new Error('login'); }
-  if (r.status === 304) return { sessions: allSessions, warnings: sessionWarnings, home: sessionsHome, checkedAt: Number(r.headers.get('x-pocket-checked-at')) };
+  if (r.status === 304) return { sessions: allSessions, held: coordHeld, warnings: sessionWarnings, home: sessionsHome, checkedAt: Number(r.headers.get('x-pocket-checked-at')) };
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { sessionsEtag = ''; throw new Error(j.error || r.statusText); }
   sessionsEtag = r.headers.get('etag') || '';
@@ -1793,7 +1812,7 @@ function followChatTitle() {
 async function refreshSessions() {
   if (sessionFetch) return sessionFetch;
   sessionFetch = (async () => {
-    try { const d = await fetchSessionList(); allSessions = d.sessions; sessionsHome = d.home || ''; sessionWarnings = d.warnings || []; if(!Number.isFinite(d.checkedAt)||d.checkedAt<=0||d.checkedAt<=sessionCheckedAt)throw new Error('No fresh server confirmation');sessionCheckedAt = d.checkedAt;serverSkew = d.checkedAt - Date.now();sessionProofReceivedAt=performance.now();sessionProofReceivedWallAt=Date.now(); sessionsStale = false; syncSeen(); const current = allSessions.find(s => s.id === chatId); if (current) markRead(chatId, current.state); }
+    try { const d = await fetchSessionList(); allSessions = d.sessions; coordHeld = d.held || []; sessionsHome = d.home || ''; sessionWarnings = d.warnings || []; if(!Number.isFinite(d.checkedAt)||d.checkedAt<=0||d.checkedAt<=sessionCheckedAt)throw new Error('No fresh server confirmation');sessionCheckedAt = d.checkedAt;serverSkew = d.checkedAt - Date.now();sessionProofReceivedAt=performance.now();sessionProofReceivedWallAt=Date.now(); sessionsStale = false; syncSeen(); const current = allSessions.find(s => s.id === chatId); if (current) markRead(chatId, current.state); }
     catch { sessionsStale = true; }
     finally { sessionFetch = null; paintSessionPanels(); followChatTitle(); if (!sessionsStale) Voice.onSessions(allSessions); }
   })();
@@ -1869,9 +1888,10 @@ function paintTurnFailure(live) {
 }
 function sessionPanelHTML(rail = false) {
   const summary = `<p class="session-summary" data-session-summary role="status">${esc(sessionSummary())}</p>`;
+  const held = `<a class="session-held" href="#/coordination" data-session-held ${coordHeldLine() ? '' : 'hidden'}>${esc(coordHeldLine())}</a>`;
   const filters = `<div data-workspace-filters></div><nav class="session-filters" data-session-filters aria-label="Filter conversations">${filterButtons()}</nav>`;
   return `<div class="session-panel ${rail ? 'compact' : ''}">
-    ${rail ? '' : summary}
+    ${rail ? '' : summary}${held}
     <div class="session-search">${IC.search}<input type="search" data-session-search aria-label="Search recent conversations" placeholder="Search recent conversations" value="${esc(sessionQuery)}" autocomplete="off"></div>
     ${rail ? `<div id="rail-filter-summary" class="rail-filter-summary" hidden><span></span><button id="clear-rail-filters">Clear filters</button></div><div id="rail-filter-controls">${summary}${filters}</div>` : `<nav class="session-filters" data-session-filters data-filter-keys="all active attention" aria-label="Conversation shortcuts">${filterButtons(['all','active','attention'])}</nav><details class="session-more-filters" data-more-filters ${readLocal('pc-session-filters-open',false)?'open':''}><summary>Filters<span data-filter-summary></span></summary>${`<div data-workspace-filters></div><nav class="session-filters" data-session-filters data-filter-keys="new pinned hidden" aria-label="More conversation filters">${filterButtons(['new','pinned','hidden'])}</nav>`}</details><button class="chip clear-more-filters" data-clear-more-filters hidden>Clear filters</button>`}
     <p class="session-warning" data-session-warning hidden></p>
@@ -1960,7 +1980,7 @@ async function renderList() {
   app.innerHTML = `<header class="bar">${assistantMode() ? `<button class="icon" id="back" aria-label="Back">${IC.back}</button><h1>Conversations</h1>` : '<h1>Pocket Code</h1>'}
     <button class="icon bell" id="bell" aria-label="Toggle notifications for this device">${IC.bellOff}</button>
     <button class="icon bell" id="settings" aria-label="Settings and version">${IC.cog}</button></header>
-    <main class="scroll session-home"><div class="session-home-head"><h2>Your conversations</h2><span class="project-head-actions">${projectsOn() ? '<a class="chip" href="#/projects" data-projects-home>Projects</a>' : ''}${documentsOn() ? '<a class="chip" href="#/documents">Files</a>' : ''}${tasksOn() ? '<a class="chip" href="#/tasks" data-tasks-home>Tasks</a>' : ''}${vaultOn() ? '<a class="chip" href="#/vault" data-vault-home>Vault</a>' : ''}${inboxOn() ? '<a class="chip" href="#/inbox" data-inbox-home>Inbox</a>' : ''}<button class="chip" id="refresh-sessions">Refresh</button></span></div>
+    <main class="scroll session-home"><div class="session-home-head"><h2>Your conversations</h2><span class="project-head-actions">${projectsOn() ? '<a class="chip" href="#/projects" data-projects-home>Projects</a>' : ''}${documentsOn() ? '<a class="chip" href="#/documents">Files</a>' : ''}${tasksOn() ? '<a class="chip" href="#/tasks" data-tasks-home>Tasks</a>' : ''}${vaultOn() ? '<a class="chip" href="#/vault" data-vault-home>Vault</a>' : ''}${inboxOn() ? '<a class="chip" href="#/inbox" data-inbox-home>Inbox</a>' : ''}${coordOn() ? '<a class="chip" href="#/coordination" data-coord-home>Coordination</a>' : ''}<button class="chip" id="refresh-sessions">Refresh</button></span></div>
     <div id="resume-last"></div>${sessionPanelHTML()}</main><button class="fab" id="new" aria-label="New conversation">${IC.plus}</button>`;
   $('#new').onclick = () => openFreshNew(assistantMode() ? '#/' : '#/new');
   if (assistantMode()) $('#back').onclick = () => { location.hash = '#/'; };
@@ -4051,12 +4071,14 @@ async function route() {
   if (typeof boardView !== 'undefined') boardView = null;
   if (typeof taskView !== 'undefined') taskView = null; // 1.36: a conversation opened from the task list must not count Tasks as the current view
   if (typeof vaultView !== 'undefined') vaultView = null; // 1.39: the same for the Vault
+  if (typeof coordView !== 'undefined') coordView = null; // 1.99: and for Coordination
   if (typeof linkView !== 'undefined') linkView = null; // 1.54: and for a linked page
   if (typeof inboxView !== 'undefined') inboxView = null; // 1.69: and for the inbox
   if (h.startsWith('#/chat/')) return renderChat(h.slice(7), { away: true });
   if (typeof docView !== 'undefined') docView = null;
   if (h === '#/projects/scheduled' && tasksOn()) { location.replace('#/tasks'); return; } // 1.50: with Tasks on, reminders are listed there
-  if (isViewId(h.slice(2))) return h === '#/vault' ? renderVault('vault') : h === '#/tasks' ? renderTasks('tasks') : h.startsWith('#/inbox') ? renderInbox('inbox') : h.startsWith('#/documents') ? renderDocuments(h.slice(2)) : h.startsWith('#/link/') ? renderLink(h.slice(2)) : renderProjects(h.slice(2)); // 1.29/1.30/1.36/1.54: project, document, task and linked-page views
+  if (h === '#/coordination' && !coordOn()) { location.replace('#/'); return; } // 1.99: off, or an Assistant install
+  if (isViewId(h.slice(2))) return h === '#/vault' ? renderVault('vault') : h === '#/tasks' ? renderTasks('tasks') : h === '#/coordination' ? renderCoordination('coordination') : h.startsWith('#/inbox') ? renderInbox('inbox') : h.startsWith('#/documents') ? renderDocuments(h.slice(2)) : h.startsWith('#/link/') ? renderLink(h.slice(2)) : renderProjects(h.slice(2)); // 1.29/1.30/1.36/1.54: project, document, task and linked-page views
   if (h.startsWith('#/start/')) return openStartLink(h.slice(8)); // 1.57: a start link puts its briefing in New session
   if (h === '#/new') return renderNew();
   if (h === '#/all') return renderList();

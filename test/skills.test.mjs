@@ -12,7 +12,7 @@ import {documentInstructions} from '../documents.mjs';
 
 const repo=path.resolve(import.meta.dirname,'..');
 const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'pocket-skills-'));
-const commands={board:'/srv/pocket/scripts/pocket-board.mjs',docs:'/srv/pocket/scripts/pocket-docs.mjs',tasks:'/srv/pocket/scripts/pocket-tasks.mjs',vault:'/srv/pocket/scripts/pocket-vault.mjs'};
+const commands={board:'/srv/pocket/scripts/pocket-board.mjs',docs:'/srv/pocket/scripts/pocket-docs.mjs',tasks:'/srv/pocket/scripts/pocket-tasks.mjs',vault:'/srv/pocket/scripts/pocket-vault.mjs',coord:'/srv/pocket/scripts/pocket-coord.mjs'};
 
 test('skills: installed while the feature is on, rewritten with this server\'s command, removed when off, never over a user\'s own skill',t=>{
   const ours=r=>({...r,installed:r.installed.filter(d=>!d.endsWith('pocket-google'))}); // pocket-google is always on (own test)
@@ -52,6 +52,16 @@ test('skills: installed while the feature is on, rewritten with this server\'s c
   // POCKET_SKILLS=0 does nothing at all.
   assert.deepEqual(syncSkills({settings:{projects:true,documents:true},commands,env:{POCKET_SKILLS:'0'},roots}),{installed:[],removed:[],skipped:[]});
   assert.equal(fs.existsSync(path.join(claude,'pocket-projects')),false);
+});
+
+test('skills: pocket-coord is installed only while Coordination is on, with this server\'s command',t=>{
+  const dir=tmp();t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const claude=path.join(dir,'claude'),codex=path.join(dir,'codex'),roots=[claude,codex],env={};
+  assert.equal(syncSkills({settings:{},commands,env,roots}).installed.some(d=>d.endsWith('pocket-coord')),false);
+  const r=syncSkills({settings:{coordination:true},commands,env,roots});
+  assert.deepEqual(r.installed.filter(d=>d.endsWith('pocket-coord')).sort(),[path.join(claude,'pocket-coord'),path.join(codex,'pocket-coord')].sort());
+  assert.match(fs.readFileSync(path.join(claude,'pocket-coord','SKILL.md'),'utf8'),/run `pocket-coord` as `node \/srv\/pocket\/scripts\/pocket-coord\.mjs`/);
+  syncSkills({settings:{coordination:false},commands,env,roots});assert.equal(fs.existsSync(path.join(claude,'pocket-coord')),false);
 });
 
 test('skills: pocket-google is always on, with Claude\'s connector file for Claude Code and the apps file for Codex; a user\'s own skill is left alone',t=>{
@@ -157,7 +167,7 @@ test('skills: a marked folder without its skill is repaired; a path with a space
 test('skills: each names its manual page, installed with this checkout\'s path; every turn points at the manual index',t=>{
   const dir=tmp();t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const roots=[path.join(dir,'claude'),path.join(dir,'codex')];
-  syncSkills({settings:{projects:true,documents:true,tasks:true,vault:true,inbox:true},commands:{...commands,inbox:'/srv/pocket/scripts/pocket-inbox.mjs'},env:{},roots,codexRoots:[roots[1]]});
+  syncSkills({settings:{projects:true,documents:true,tasks:true,vault:true,inbox:true,coordination:true},commands:{...commands,inbox:'/srv/pocket/scripts/pocket-inbox.mjs'},env:{},roots,codexRoots:[roots[1]]});
   for(const s of SKILLS){
     assert.ok(s.manual,`${s.name} names a manual page`);
     const page=path.join(repo,'docs','manual',s.manual);

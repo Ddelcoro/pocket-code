@@ -32,6 +32,8 @@ in Settings → Projects, files, tasks & vault, and a session works the same wit
 8. Vault: let agents use credentials by name, in commands and browser logins, without the
    values reaching the model, the transcript or memory, with the owner deciding how much
    they may do without asking.
+9. Coordination: see which conversation holds staging or a deploy and who is waiting, so two
+   conversations don't work the same shared thing at once. Holds are advice, not a lock.
 9. Inbox: read what the owner's inbox watcher (Inbox Watch) sent, answer it (resolved, not
    useful, dismiss) so the watcher learns, and set when it checks, which models judge and
    what it may skip, with what each day cost.
@@ -44,7 +46,7 @@ Assistant mode.
 
 **Principles:**
 - Bare essentials: sessions, chat, new session. A clean screen, simple navigation, and as
-  much room as possible for the conversation. Projects, Files, Tasks, Inbox and the Vault are
+  much room as possible for the conversation. Projects, Files, Tasks, Inbox, Coordination and the Vault are
   off by default and sit beside sessions rather than in front of them.
 - Everything round-trips with the CLIs and editor extensions. No private history.
 - Reading matters more than composing. Assistant text renders as a full-width document,

@@ -77,7 +77,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       return reply(m.id,{model:'gpt-test',reasoningEffort:null,cwd:p.cwd||process.cwd()});
     case 'turn/start':{
       const text=p.input?.[0]?.text||'',turnId=randomUUID();
-      fs.appendFileSync(calls+'.codex',JSON.stringify({threadId:p.threadId,pid:process.pid,text,model:p.model,collaborationModel:p.collaborationMode?.settings?.model})+'\n');
+      fs.appendFileSync(calls+'.codex',JSON.stringify({threadId:p.threadId,pid:process.pid,text,model:p.model,collaborationModel:p.collaborationMode?.settings?.model,runnerToken:process.env.POCKET_RUNNER_TOKEN})+'\n');
       reply(m.id,{turn:{id:turnId}});
       notify('turn/started',{turnId});
       // __NULLFRAME__: lines that parse as JSON but are not objects (a real app-server once wrote a bare `null`).
@@ -115,7 +115,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       if(text.includes('__LIMIT__')){fs.writeFileSync(limitFile,String(Date.now()+2000));const error={message:"You've hit your usage limit.",codexErrorInfo:'usageLimitExceeded'};setTimeout(()=>{notify('error',{threadId:p.threadId,turnId,willRetry:false,error});notify('turn/completed',{turn:{id:turnId,status:'failed',error}});},150);return;}
       if(text.includes('__CMDAPPROVAL__')){askPocket('item/commandExecution/requestApproval',{threadId:p.threadId,turnId,itemId:randomUUID(),command:"/bin/bash -lc 'echo CX_OK'",cwd:process.cwd()}).then(r=>{fs.appendFileSync(calls+'.cxapprovals',JSON.stringify({decision:r?.decision})+'\n');finish('Codex ran it: '+(r?.decision||'none'));});return;}
       if(text.includes('__QUESTION__')){askPocket('item/tool/requestUserInput',{threadId:p.threadId,turnId,questions:[{id:'q-color',header:'Color',question:'Which color?',options:[{label:'Blue',description:'Cool'},{label:'Red',description:'Warm'}]}]}).then(r=>finish('Codex heard '+JSON.stringify(r?.answers||{})));return;}
-      setTimeout(()=>finish(text.includes('__CHOICES__')?'Tests pass. Should I merge and deploy?\n\n```choices\nMerge and deploy\nNot yet\n```':'Codex test response.'),text.includes('__SLOW__')?1500:200);
+      setTimeout(()=>finish(text.includes('__CHOICES__')?'Tests pass. Should I merge and deploy?\n\n```choices\nMerge and deploy\nNot yet\n```':'Codex test response.'),text.includes('__SLOW__')?1500:/__(CHOICES|PLAN|COST)__/.test(text)?800:200);
       return;
     }
     // 1.79: a fork copies the source thread's items into a new thread; ephemeral ones are not saved and hold no lock.

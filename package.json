@@ -1,6 +1,6 @@
 {
   "name": "pocket-code",
-  "version": "1.98.0",
+  "version": "1.99.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -8,6 +8,7 @@
     "pocket-board": "scripts/pocket-board.mjs",
     "pocket-docs": "scripts/pocket-docs.mjs",
     "pocket-tasks": "scripts/pocket-tasks.mjs",
+    "pocket-coord": "scripts/pocket-coord.mjs",
     "pocket-vault": "scripts/pocket-vault.mjs",
     "pocket-inbox": "scripts/pocket-inbox.mjs"
   },

@@ -743,6 +743,29 @@ header.bar { gap: 2px; padding-inline: 8px; }
 .git-also { margin:0 0 10px;color:var(--dim);font-size:14px;line-height:1.5;overflow-wrap:anywhere; }
 .git-also a { color:var(--text); }
 [data-git-status] { margin:16px 0;color:var(--dim);font-size:14px; }
+/* Coordination (1.99): one line per hold on a phone-sized stack, columns from 700px. No card, hairlines only; time in the ledger mono. */
+.session-held { display:flex;align-items:center;min-height:44px;padding:0 18px;color:var(--dim);font-size:14px;line-height:1.4;overflow-wrap:anywhere;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px; }
+.session-held[hidden] { display:none; }
+.rail .session-held { padding-inline:12px; }
+.coord-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;padding:12px 18px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.45; }
+.coord-name { font-weight:600;overflow-wrap:anywhere; }
+.coord-who,.coord-why,.coord-wait { grid-column:1 / -1;min-width:0;overflow-wrap:anywhere; }
+.coord-who { color:var(--dim); }
+.coord-who a { color:inherit;text-underline-offset:3px; }
+.coord-why { color:var(--text); }
+.coord-wait { color:var(--dim); }
+.coord-time { grid-row:1;grid-column:2;color:var(--dim);font-family:ui-monospace,"Cascadia Mono",Menlo,monospace;font-size:13px;white-space:nowrap; }
+.coord-release { grid-column:1 / -1;justify-self:end;margin-top:6px; }
+.coord-past .coord-why { color:var(--dim); }
+.coord-foot { padding:14px 18px 0; }
+@media (min-width:700px) {
+  .coord-row { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.6fr) 7ch auto;align-items:center; }
+  .coord-past { grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.6fr) 7ch 76px; }
+  .coord-who,.coord-why,.coord-wait { grid-column:auto; }
+  .coord-time { grid-row:auto;grid-column:auto;text-align:right; }
+  .coord-wait { grid-row:2;grid-column:2 / 5; }
+  .coord-release { grid-row:1 / span 2;grid-column:5;margin-top:0; }
+}
 .git-trees { margin-top:24px; }
 .git-trees h3 { font-size:14px;font-weight:600;line-height:1.5;margin:0 0 4px; }
 .git-tree-progress { color:var(--dim);font-size:14px;line-height:1.5; }

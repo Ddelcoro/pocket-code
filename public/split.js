@@ -180,6 +180,7 @@ function chooseBesideNow(loading=false){
   }
   if(typeof tasksOn==='function'&&tasksOn())groups[0][1].push(['tasks','Tasks','To-dos, due first']); // 1.36
   if(typeof vaultOn==='function'&&vaultOn())groups[0][1].push(['vault','Vault','Secrets agents use without seeing']); // 1.39
+  if(typeof coordOn==='function'&&coordOn())groups[0][1].push(['coordination','Coordination','What conversations hold, and who is waiting']); // 1.99
   if(documentsOn()){
    groups[0][1].push(['documents','Files','The library of files from the work']);
    const docs=docsSnap?.documents||[],open=openSessions.slice().reverse().filter(t=>t.id.startsWith('documents/')).map(t=>docs.find(d=>d.id===t.id.slice(10))).filter(Boolean);

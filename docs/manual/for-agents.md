@@ -27,6 +27,7 @@ The pages:
 | [Projects](projects.md) | Project cards and `pocket-board` |
 | [Files](files.md) | The Files library and `pocket-docs` |
 | [Tasks](tasks.md) | To-dos and `pocket-tasks` |
+| [Coordination](coordination.md) | Holds on shared things and `pocket-coord` |
 | [Inbox Watch](inbox-watch.md) | Mail alerts and `pocket-inbox` |
 | [Gmail, Calendar and Drive](google.md) | Google through each agent's connectors |
 | [Vault](vault.md) | Credentials used by name, and `pocket-vault` |
@@ -93,6 +94,7 @@ Pocket ships agent skills in the `skills/` folder of the Pocket Code directory a
 | `pocket-projects` | **Projects** is on | `pocket-board` | [Projects](projects.md) |
 | `pocket-files` | **Files** is on | `pocket-docs` | [Files](files.md) |
 | `pocket-tasks` | **Tasks** is on | `pocket-tasks` | [Tasks](tasks.md) |
+| `pocket-coord` | **Coordination** is on and Assistant mode is off | `pocket-coord` | [Coordination](coordination.md) |
 | `pocket-inbox` | **Inbox Watch** is on | `pocket-inbox` | [Inbox Watch](inbox-watch.md) |
 | `pocket-vault` | The Vault is on and its store loaded (a locked Vault counts) | `pocket-vault` | [Vault](vault.md) |
 | `pocket-google` | Always (`SKILL.claude.md` for Claude Code, `SKILL.codex.md` for Codex) | none | [Gmail, Calendar and Drive](google.md) |
@@ -112,6 +114,7 @@ All of these talk to the running Pocket daemon over loopback. Each reads the dae
 | `pocket-board` | `scripts/pocket-board.mjs` | **Projects** is on | [Projects](projects.md) |
 | `pocket-docs` | `scripts/pocket-docs.mjs` | **Files** is on | [Files](files.md) |
 | `pocket-tasks` | `scripts/pocket-tasks.mjs` | **Tasks** is on | [Tasks](tasks.md) |
+| `pocket-coord` | `scripts/pocket-coord.mjs` | **Coordination** is on and Assistant mode is off | [Coordination](coordination.md) |
 | `pocket-inbox` | `scripts/pocket-inbox.mjs` | **Inbox Watch** is on | [Inbox Watch](inbox-watch.md) |
 | `pocket-vault` | `scripts/pocket-vault.mjs` | The Vault is on | [Vault](vault.md#for-agents) |
 | `pocket-start` | `scripts/pocket-start.mjs` | Always | [Start links](#hand-the-user-a-briefing-with-a-start-link) |

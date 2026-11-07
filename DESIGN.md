@@ -1098,3 +1098,16 @@ native `details`, open from 700px and closed on a phone with their counts showin
 list has no destructive `--clay`. The confirm sheet `.git-remove` is the one place with `--clay` (**Remove folder**) and the
 one place with `--warn`, on the line that names ignored files, because that is what's lost. **Keep it** is a chip. No motion:
 groups fill in without animating.
+
+## Coordination (1.99)
+
+Pinned Operate refinement (design-studio → impeccable): variance 2, motion 1, density 7; existing tokens, no new colour. Read:
+the person glances here to see whether something is in the way, and a stale claim is the only thing they act on. `#/coordination`
+opens like Tasks, with no card around anything. `.coord-row` is a hairline row: from 700px, name (semibold), conversation link,
+reason, age in the ledger mono and **Release**, with the waiting line under the conversation; on a phone the same parts stack
+and the age stays beside the name. **Release** is a plain chip, not `--clay`: it's one tap, and the holder is only told, so the
+view has no primary action and no `--warn`. A clash is never shown here, because the agent hits it. **Recent** uses the same
+columns, with the empty action column kept so times line up. `Terminal session` is plain text, so an unverified holder has no
+link. `.session-held` is one `--dim` underlined line above the list, only while something is held; a quiet day looks exactly
+as it did. No badge, counter or motion: rows change when the 10-second check changes the words. Focus stays on a Release
+button across a repaint. Assistant mode shows none of it.

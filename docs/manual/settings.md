@@ -130,6 +130,7 @@ switches apply to the whole install; the three **Open …** menus apply to this 
 | **Files** | Turns on [Files](files.md) | Off | Server |
 | **Keep files from replies** | Keeps every file a reply hands over (a PDF, deck, sheet, page) in Files once, linked to its conversation. Needs Files; always on in Assistant mode | Off | Server |
 | **Tasks** | Turns on [Tasks](tasks.md) | Off | Server |
+| **Coordination** | Turns on [Coordination](coordination.md): which conversation holds staging or a deploy, and who is waiting. Not in Assistant mode | Off | Server |
 | **Inbox Watch** | Turns on [Inbox Watch](inbox-watch.md) and its Inbox. While it is on, **Schedule, models and cost** opens its schedule sheet; **Schedule** beside the Inbox's search box opens the same sheet, also in Assistant mode | Off | Server |
 | **Vault** | Turns on the [Vault](vault.md). The first time, it creates the encryption key, saves it to `.env` and shows a recovery key to save. **Restore key…** appears when the Vault exists but its key is missing | Off | Server |
 | **Agent access** (Vault on) | **Free rein**, **Ask once per command** or **Ask every time** | **Ask once per command** | Server |
@@ -140,7 +141,7 @@ switches apply to the whole install; the three **Open …** menus apply to this 
 | **Files button** | **Lists files in the sidebar**, **Opens the library in a tab** or **Opens the library in split view** | Lists files in the sidebar | This browser |
 | **Open files and links** | The same three choices, for a file and for a link in a conversation to one of your files, projects or conversations. Links to outside websites open in the browser | As a tab | This browser |
 
-Turning Projects, Files, Tasks, Inbox Watch or the Vault on or off also installs or removes the
+Turning Projects, Files, Tasks, Coordination, Inbox Watch or the Vault on or off also installs or removes the
 matching agent skill for Claude Code and Codex (unless `POCKET_SKILLS=0`). Turning the Vault on or
 off restarts idle conversation processes so they get the Vault's rules.
 

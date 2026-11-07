@@ -92,7 +92,7 @@ WebP; ImageMagick is told that coder (`png:`, `jpeg:`, `gif:`, `webp:`), so a `.
 PostScript or SVG gets no picture instead of reaching Ghostscript or the SVG reader (which can
 read other local files into the picture). A JPEG or WebP saved as `.png` is pictured as what it is. You can also restrict ImageMagick's coders in its `policy.xml`.
 
-**CLI token.** The `pocket-board`, `pocket-docs`, `pocket-tasks` and `pocket-vault` commands
+**CLI token.** The `pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-coord` and `pocket-vault` commands
 use a bearer token that the daemon writes to `cli-token` in the data directory (mode `0600`)
 and replaces at every start. It is accepted only on the Projects, Files, Tasks and Vault
 routes, and only on a direct loopback connection: a request carrying a `cf-connecting-ip` or

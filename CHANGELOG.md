@@ -3,6 +3,15 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.99.0] — 2026-11-07 · build 192
+
+### Added
+- **Coordination.** A new optional feature, off by default and never in Assistant mode. `#/coordination` lists what is held now (name, conversation, reason, age, who is waiting) and what ended lately; **Release** is one tap, and the holder is told when it next runs. While something is held, one line shows above the conversation list. Holds are advice: nothing stops a deploy, and a real lock keeps doing the enforcing.
+- **`pocket-coord` command and skill.** `hold`, `wait [--block --timeout]`, `release [--note]` and `list`. A clash exits 2 and names the holder, reason and age. A name close to an existing one is refused unless `--new` is passed. Holds last 60 minutes by default, 8 hours at most, and renew while their conversation is running.
+- **Waking.** On release or expiry Pocket wakes the first conversation that asked to wait, once, through its own queue and in the approval mode it asked with. The sweep runs every 30 seconds (`POCKET_COORD_SWEEP_MS`).
+- **Conversation identity on OpenRouter, for Coordination only.** Each OpenRouter process now carries a runner token, so a hold names its conversation on all three agents. The Vault still treats those conversations as terminal sessions.
+- New `coordination.mjs`, `scripts/pocket-coord.mjs`, `skills/pocket-coord`, `public/coordination.js`, `docs/manual/coordination.md`; `GET /api/coordination`, `POST /api/coordination/hold|wait|wait/cancel|release|owner-release`.
+
 ## [1.98.0] — 2026-11-07 · build 191
 
 ### Added

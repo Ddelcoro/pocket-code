@@ -58,7 +58,7 @@ Projects, Files, Tasks or the Vault switched on writes the Pocket agent skills i
 PORT does not isolate credentials or session data.
 
 The daemon overwrites `cli-token` and `cli-url` in its data directory at every start, and
-`pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-vault` and the browser relay read them. So the rule of one
+`pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-vault`, `pocket-coord` and the browser relay read them. So the rule of one
 daemon per data directory covers the commands too: a second daemon on the same directory
 replaces the first one's token and the commands stop working against it.
 

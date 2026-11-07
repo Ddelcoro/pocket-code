@@ -1,4 +1,5 @@
 import {clickControl} from './ui-controls.mjs';
+import {runCoordinationRegressions} from './coordination-browser.mjs';
 // Deterministic frontend acceptance checks. This serves fixtures only: no real
 // sessions, credentials, CLI, or production service is involved.
 import http from 'node:http';
@@ -58,6 +59,13 @@ const secretRefusal=body=>{if(fixtureSettings.secretGuard===false||body.allowSec
 // 1.40: the passphrase the fixture checks (never sent back on /api/settings), and the last import's decoded file.
 // 1.41: extraRequests are added to the snapshot's requests as they are (a request on an item that asks every time).
 const vaultFixture={passphrase:null,imported:null,extraRequests:[],key:null}; // 1.44: key is the fixture store's key, the recovery key the routes hand out
+const coordFixture={holds:[],recent:[],released:[],failNext:false,reset(holds){const ago=m=>Date.now()-m*60000-5000;this.released=[];this.failNext=false;
+ this.holds=holds||[{name:'dad-staging',reason:'Building and verifying',holder:{kind:'conversation',session:'f00d0000-0000-4000-8000-0000000000aa',title:'DAD 1.168 build'},heldAt:ago(12),expiresAt:Date.now()+48*60000,ttlMs:3600000,waiters:[{id:'w1',kind:'conversation',session:'f00d0000-0000-4000-8000-0000000000ab',at:ago(4),block:false,title:'PayPal fix'}]},
+  {name:'tpv-deploy',reason:'Rolling out to the Oaks recorder from a terminal on the ops box, so wait for it to finish',holder:{kind:'terminal',session:null,title:''},heldAt:ago(185),expiresAt:Date.now()+295*60000,ttlMs:28800000,waiters:[]}];
+ this.recent=[{name:'pocket-main',reason:'Release',holder:{kind:'conversation',session:'f00d0000-0000-4000-8000-0000000000aa',title:'Release 1.98'},heldAt:ago(90),endedAt:ago(40),event:'released',note:'Deployed and checked'},
+  {name:'dad-production',reason:'Rollout',holder:{kind:'terminal',session:null,title:''},heldAt:ago(300),endedAt:ago(120),event:'expired',note:''},
+  {name:'staging-db',reason:'Reset',holder:{kind:'conversation',session:'f00d0000-0000-4000-8000-0000000000ab',title:'Database reset'},heldAt:ago(500),endedAt:ago(200),event:'owner',note:''}];}};
+coordFixture.reset();
 const resetVaultLock=()=>{Object.assign(fixtureSettings,{vaultMode:'key',vaultLocked:false,vaultAutoLockMinutes:0,vaultAccess:'once',vaultCanCreateKey:false,vaultNeedsKey:false});vaultFixture.passphrase=null;vaultFixture.imported=null;vaultFixture.extraRequests=[];};
 // 1.30: the documents fixture is the real store on a scratch folder: an HTML dashboard whose script tries to reach
 // the parent (the sandbox must stop it), a Markdown note and a CSV.
@@ -195,7 +203,12 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/voice/transcribe'){const chunks=[];for await(const c of req)chunks.push(c);voiceLog.transcribe.push({bytes:Buffer.concat(chunks).length,vocabulary:req.headers['x-vocabulary']||''});return json({text:uiModes.voiceText});}
  if(url.pathname==='/api/voice/speak'){let raw='';for await(const c of req)raw+=c;voiceLog.speak.push(JSON.parse(raw));res.writeHead(200,{'content-type':'audio/wav'});res.end(silentWav);return;}
  if(url.pathname.endsWith('/release')){let raw='';for await(const c of req)raw+=c;const stop=JSON.parse(raw||'{}').stop;return url.pathname.includes(rows[0].id)&&!stop?json({error:'Still running'},409):json({ok:true});}
- if(url.pathname==='/api/me')return json({ok:true,features:{projects:Boolean(fixtureSettings.projects),documents:Boolean(fixtureSettings.documents),tasks:Boolean(fixtureSettings.tasks),vault:Boolean(fixtureSettings.vault),inbox:Boolean(fixtureSettings.inbox),assistantMode:Boolean(fixtureSettings.assistantMode),assistantLocked:Boolean(fixtureSettings.assistantLocked)}});
+ if(url.pathname==='/api/me')return json({ok:true,features:{coordination:Boolean(fixtureSettings.coordination)&&!fixtureSettings.assistantMode,projects:Boolean(fixtureSettings.projects),documents:Boolean(fixtureSettings.documents),tasks:Boolean(fixtureSettings.tasks),vault:Boolean(fixtureSettings.vault),inbox:Boolean(fixtureSettings.inbox),assistantMode:Boolean(fixtureSettings.assistantMode),assistantLocked:Boolean(fixtureSettings.assistantLocked)}});
+ // 1.99: Coordination's two calls, on a list the test resets.
+ if(url.pathname==='/api/coordination')return json({now:Date.now(),seeds:[],holds:coordFixture.holds,recent:coordFixture.recent});
+ if(url.pathname==='/api/coordination/owner-release'){let raw='';for await(const c of req)raw+=c;const {name}=JSON.parse(raw),hold=coordFixture.holds.find(h=>h.name===name);coordFixture.holds=coordFixture.holds.filter(h=>h!==hold);
+  if(coordFixture.failNext){coordFixture.failNext=false;return json({error:`${name} is already free.`,code:'not_held'},404);}
+  coordFixture.released.push(name);coordFixture.recent=[{...hold,event:'owner',endedAt:Date.now(),note:''},...coordFixture.recent];return json({ok:true,name,woke:hold.waiters[0]?.title||null});}
  if(url.pathname==='/api/approval-policy')return json({defaultMode:'review',allowFullAccess:true});
  if(url.pathname.endsWith('/approvals'))return json({requests:approvalRequests,interrupted:Boolean(uiModes.approvalsInterrupted),activeMode:'review',defaultMode:'review',allowFullAccess:true});
  if(/\/approvals\/[^/]+\/decision$/.test(url.pathname)){
@@ -210,7 +223,8 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/sessions'){
   if(stale)return json({error:'Fixture offline'},503);
   // Like the live server (1.19): an unchanged list answers 304 with the check time in a header.
-  const payload={sessions:[...rows].sort((a,b)=>pinKey(a)-pinKey(b)),warnings:[],home:'/workspaces/purchasing'},checkedAt=Date.now();
+  const coordHeld=fixtureSettings.coordination&&!fixtureSettings.assistantMode?coordFixture.holds.map(h=>({name:h.name,title:h.holder.title})):[];
+  const payload={sessions:[...rows].sort((a,b)=>pinKey(a)-pinKey(b)),warnings:[],home:'/workspaces/purchasing',...(coordHeld.length?{held:coordHeld}:{})},checkedAt=Date.now();
   const etag='"'+createHash('sha1').update(JSON.stringify(payload)).digest('base64url')+'"';
   if(req.headers['if-none-match']===etag){uiModes.notModified=(uiModes.notModified||0)+1;res.writeHead(304,{etag,'x-pocket-checked-at':String(checkedAt)});res.end();return;}
   res.writeHead(200,{'content-type':'application/json',etag,'x-pocket-checked-at':String(checkedAt)});res.end(JSON.stringify({...payload,checkedAt}));return;
@@ -430,6 +444,7 @@ const scan=async label=>{
 try{
  if(process.env.POCKET_SLASH_ONLY){ /* POCKET_SLASH_ONLY=n: the / picker checks only, n times over, to shake out a flake */const {runSlashRegressions}=await import('./slash-browser.mjs');for(let k=0;k<Number(process.env.POCKET_SLASH_ONLY);k++){console.log('iteration',k);await runSlashRegressions({browser,base,rows,received,out});}throw Object.assign(Error('slash only'),{docsOnly:true});}
  if(process.env.POCKET_CLI_UPDATES_ONLY){const {runCliUpdateRegressions}=await import('./cli-updates-browser.mjs');await runCliUpdateRegressions({browser,base,out});throw Object.assign(Error('CLI updates only'),{docsOnly:true});}
+ if(process.env.POCKET_COORD_ONLY){await runCoordinationRegressions({p,base,out,repo,rows,settings:fixtureSettings,coord:coordFixture,scan});if(scans.length)fs.writeFileSync(path.join(out,'design-scan.json'),JSON.stringify(scans,null,2));console.log(JSON.stringify({ok:true,coordinationOnly:true,screenshots:out}));throw Object.assign(Error('coordination only'),{docsOnly:true});}
  if(process.env.POCKET_THEME_ONLY){
   const {runThemeRegressions}=await import('./theme-browser.mjs');
   await runThemeRegressions({browser,base,rows,out,settings:fixtureSettings,modes:uiModes,setRequests:r=>{questionRequests=r.questions||[];approvalRequests=r.approvals||[];}});
@@ -975,6 +990,7 @@ try{
  const {runThemeRegressions}=await import('./theme-browser.mjs');
  await runThemeRegressions({browser,base,rows,out,settings:fixtureSettings,modes:uiModes,setRequests:r=>{questionRequests=r.questions||[];approvalRequests=r.approvals||[];}});
  assert.deepEqual(errors,[]);
+ await runCoordinationRegressions({p,base,out,repo,rows,settings:fixtureSettings,coord:coordFixture,scan});
  if(scans.length)fs.writeFileSync(path.join(out,'design-scan.json'),JSON.stringify(scans,null,2));
  console.log(JSON.stringify({ok:true,viewports:[360,390,768,1440],dispatches,receiptReplay:true,newSessionRecovery:true,draftAndAttachmentRecovery:true,dialogFocus:true,staleStatus:true,markdownSafety:true,results:true,queueEditing:true,skillLauncher:true,screenshots:out}));
 }catch(e){if(e.docsOnly){}else{console.error('Page errors:',errors);console.error('Page URL:',p.url());throw e;}}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

@@ -111,7 +111,7 @@ test('HTTP: documents are off until Settings turns them on; raw is sandboxed; pu
   assert.equal((await call('/api/documents')).body.code,'documents_off');assert.equal((await raw('/files/dashboard.html')).status,404,'nothing public while off');
   assert.equal((await call('/api/new',{cwd:repo,text:'Before',provider:'claude',clientMessageId:randomUUID()})).status,202);for(let i=0;i<50&&calls().length<1;i++)await sleep(50);
   assert.equal(calls().at(-1).documents,false);
-  assert.equal((await call('/api/settings',{documents:true})).body.documents,true);assert.deepEqual((await call('/api/me')).body.features,{projects:false,documents:true,tasks:false,inbox:false,vault:false,assistantMode:false,assistantLocked:false});
+  assert.equal((await call('/api/settings',{documents:true})).body.documents,true);assert.deepEqual((await call('/api/me')).body.features,{projects:false,documents:true,tasks:false,inbox:false,coordination:false,vault:false,assistantMode:false,assistantLocked:false});
   assert.equal((await call('/api/new',{cwd:repo,text:'After',provider:'claude',clientMessageId:randomUUID()})).status,202);for(let i=0;i<50&&calls().length<2;i++)await sleep(50);
   assert.equal(calls().at(-1).documents,true,'agents are told how to keep documents once the feature is on');
   let lib=await call('/api/documents');assert.equal(lib.status,200);assert.deepEqual(lib.body.documents.map(d=>[d.file,d.title,d.addedBy]),[['dashboard.html','Ops dashboard','folder']],'the folder was adopted');

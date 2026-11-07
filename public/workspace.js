@@ -28,11 +28,11 @@ function openViewPreferred(id,prefKey,e,canBeside){
 function readLocal(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
 function writeLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{}}
 // 1.29: project views open like sessions (tabs, panes); their ids are routes without the leading #/.
-const VIEW_TAB_RE=/^(?:projects(?:\/(?:scheduled|[a-z0-9][a-z0-9-]{0,79}))?|documents(?:\/[0-9a-f]{12})?|tasks|vault|inbox(?:\/[0-9a-f]{12})?|link\/[A-Za-z0-9%._~!*'()-]{1,2000})$/; // 1.30: documents too; 1.36: tasks; 1.39: vault; 1.54: a linked page (links.js)
+const VIEW_TAB_RE=/^(?:projects(?:\/(?:scheduled|[a-z0-9][a-z0-9-]{0,79}))?|documents(?:\/[0-9a-f]{12})?|tasks|coordination|vault|inbox(?:\/[0-9a-f]{12})?|link\/[A-Za-z0-9%._~!*'()-]{1,2000})$/; // 1.30: documents too; 1.36: tasks; 1.39: vault; 1.54: a linked page (links.js)
 const isViewId=id=>typeof id==='string'&&VIEW_TAB_RE.test(id);
 const tabHref=id=>isViewId(id)?'#/'+id:'#/chat/'+encodeURIComponent(id).replaceAll('%3A',':');
 // The view the main column shows when it is not a conversation: a project view (1.29) or a document view (1.30).
-const currentView=()=>(typeof boardView!=='undefined'&&boardView)||(typeof docView!=='undefined'&&docView)||(typeof taskView!=='undefined'&&taskView)||(typeof vaultView!=='undefined'&&vaultView)||(typeof linkView!=='undefined'&&linkView)||(typeof inboxView!=='undefined'&&inboxView)||null; // 1.39: vault; 1.54: a linked page; 1.85.1: the inbox
+const currentView=()=>(typeof boardView!=='undefined'&&boardView)||(typeof docView!=='undefined'&&docView)||(typeof taskView!=='undefined'&&taskView)||(typeof coordView!=='undefined'&&coordView)||(typeof vaultView!=='undefined'&&vaultView)||(typeof linkView!=='undefined'&&linkView)||(typeof inboxView!=='undefined'&&inboxView)||null; // 1.39: vault; 1.54: a linked page; 1.85.1: the inbox
 // Native radio keyboard conventions for our button-based choices.
 function bindRadioGroup(group) {
  const radios=()=>[...group.querySelectorAll('[role="radio"]')].filter(el=>!el.disabled&&!el.hidden);
@@ -702,7 +702,7 @@ function organizeSettings(sh, {category='',scrollTop=0}={}) {
   ['appearance','Appearance','Light, dark, text size and highlight colour', [['This device','.chat-text-settings'],['This instance · all devices','#s-mode']]],
   ['conversation','Conversation','Reading, conversation titles and summaries', [['This device','#s-tools,#s-plain,#s-times'],['This instance · all devices','#s-sync,#s-sync-retry,#s-titles,#s-live,#s-away','#s-title-model']]],
   ['agents','Agents & instance','Accounts, connectors, plan usage, models, context and subagents, automatic model choice, actions that run without asking and sign-in', [['This instance · all devices','#s-environment,#s-connectors,#s-usage,#s-models,#s-context,#s-trusted,#s-router,#s-access']]],
-  ['libraries','Projects, files, tasks & vault','Tools and how they open', [['This instance · all devices','#s-projects,#s-documents,#s-autokeep,#s-tasks,#s-inbox,#s-inbox-watch,#s-vault,#s-vault-more'],['This device','', '#s-projects-open,#s-files-button,#s-documents-open']]],
+  ['libraries','Projects, files, tasks & vault','Tools and how they open', [['This instance · all devices','#s-projects,#s-documents,#s-autokeep,#s-tasks,#s-coordination,#s-inbox,#s-inbox-watch,#s-vault,#s-vault-more'],['This device','', '#s-projects-open,#s-files-button,#s-documents-open']]],
   ['notifications','Notifications & voice','Chime, push, the icon count, email and spoken replies', [['This device','#s-chime,#s-push,#s-push-kinds,#s-badge,#s-voice'],['This instance · all devices','#s-ahead,#s-email-wrap']]],
   ['help','Help & updates','Keyboard shortcuts, version and feedback', [['','#s-keys,#s-about,#s-notes,#s-feedback']]],
  ];

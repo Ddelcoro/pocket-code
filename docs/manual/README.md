@@ -23,6 +23,7 @@ say conversation.
 | [Projects](projects.md) | Project cards, checklists, reminders and the `pocket-board` command |
 | [Files](files.md) | The Files library, sharing and publishing, and the `pocket-docs` command |
 | [Tasks](tasks.md) | To-dos with due times, reminders and a Start button, and the `pocket-tasks` command |
+| [Coordination](coordination.md) | Which conversation holds staging or a deploy, who is waiting, and the `pocket-coord` command |
 | [Inbox Watch](inbox-watch.md) | Alerts, digests and look-aheads from your mailbox, setup, and the `pocket-inbox` command |
 | [Gmail, Calendar and Drive](google.md) | Using Google through each agent's connectors, and the drafts-first rule |
 | [Vault](vault.md) | Credentials agents use by name and never see, approvals, and the `pocket-vault` command |

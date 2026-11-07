@@ -46,7 +46,7 @@ async function boot(t, port) {
   const prompts = engine => {
     if (engine === 'claude') return fs.readFileSync(path.join(dir, 'calls'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
     if (engine === 'codex') return fs.readFileSync(path.join(dir, 'calls.codex'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
-    return fs.readdirSync(path.join(dir, 'acp-store')).map(f => JSON.parse(fs.readFileSync(path.join(dir, 'acp-store', f), 'utf8'))).flatMap(s => (s.prompts || []).map(text => ({ text, seen: s.seen })));
+    return fs.readdirSync(path.join(dir, 'acp-store')).map(f => JSON.parse(fs.readFileSync(path.join(dir, 'acp-store', f), 'utf8'))).flatMap(s => (s.prompts || []).map(text => ({ text, seen: s.seen, runnerToken: s.runnerToken })));
   };
   const sse = (id, stopOn) => new Promise(resolve => {
     const ctrl = new AbortController(), evs = [], timer = setTimeout(() => { ctrl.abort(); resolve(evs); }, 15000);
@@ -55,7 +55,7 @@ async function boot(t, port) {
       for await (const c of r.body) { buf += Buffer.from(c).toString(); let i; while ((i = buf.indexOf('\n\n')) >= 0) { const line = buf.slice(0, i).split('\n').find(l => l.startsWith('data:')); buf = buf.slice(i + 2); if (!line) continue; let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; } evs.push(ev); if (stopOn(ev)) { clearTimeout(timer); ctrl.abort(); return resolve(evs); } } }
     }).catch(() => { clearTimeout(timer); resolve(evs); });
   });
-  return { dir, cwd, home, call, e, until, start, session, idle, prompts, sse, logs: () => logs };
+  return { port, dir, cwd, home, call, e, until, start, session, idle, prompts, sse, logs: () => logs };
 }
 
 test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', { timeout: 240_000 }, async t => {
@@ -223,6 +223,32 @@ test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', {
       const second = await s.call(`/session/${s.e(id)}/message`, { text: `parity gone third ${engine}`, approvalMode: 'full' });
       assert.equal(second.status, 202); assert.equal(second.body.carriedOn, undefined, 'it is said once');
       await s.idle(id);
+    });
+
+    await t.test(`${engine}: a hold names its conversation, the owner's release is told once, and a waiter is woken`, async () => {
+      assert.equal((await s.call('/settings', { coordination: true })).status, 200);
+      const name = 'parity-' + engine, bearer = { 'content-type': 'application/json', authorization: 'Bearer ' + fs.readFileSync(path.join(s.dir, 'data', 'cli-token'), 'utf8').trim() };
+      const token = text => s.until(() => s.prompts(engine).find(c => c.text.startsWith(text))?.runnerToken, 8000, 'the runner token');
+      const agent = async (p, tok, body) => { const r = await fetch(`http://127.0.0.1:${s.port}/api/coordination${p}`, { method: 'POST', headers: { ...bearer, 'x-pocket-runner': tok }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; };
+      const a = await s.start(engine, `coord holder ${engine} __HANG__`), b = await s.start(engine, `coord waiter ${engine} __HANG__`);
+      const ta = await token(`coord holder ${engine}`), tb = await token(`coord waiter ${engine}`);
+      const held = await agent('/hold', ta, { name, reason: 'Parity', new: true });
+      assert.equal(held.status, 200, JSON.stringify(held.body));
+      assert.equal(held.body.hold.holder.session, a, `${engine}: the runner token proved the conversation`);
+      const clash = await agent('/hold', tb, { name, reason: 'Mine' });
+      assert.equal(clash.status, 409); assert.equal(clash.body.hold.holder.session, a);
+      assert.equal((await agent('/wait', tb, { name })).body.free, false);
+      for (const id of [a, b]) { assert.equal((await s.call(`/session/${s.e(id)}/stop`, {})).status, 200); await s.idle(id); }
+      assert.equal((await s.call('/coordination/owner-release', { name })).status, 200);
+      await s.until(() => s.prompts(engine).some(c => c.text.startsWith(`[Pocket coordination] ${name} is free`)), 10000, 'the waiter to be woken');
+      await s.idle(b);
+      await s.call(`/session/${s.e(a)}/message`, { text: `coord next ${engine}`, approvalMode: 'full' });
+      await s.until(() => s.prompts(engine).find(c => c.text.startsWith(`coord next ${engine}`) && c.text.includes(`[Pocket: The owner released your hold on ${name}.`)), 10000, 'the holder to be told');
+      await s.idle(a);
+      await s.call(`/session/${s.e(a)}/message`, { text: `coord later ${engine}`, approvalMode: 'full' });
+      await s.until(() => s.prompts(engine).some(c => c.text.startsWith(`coord later ${engine}`)), 10000, 'the next message');
+      assert.ok(!s.prompts(engine).find(c => c.text.startsWith(`coord later ${engine}`)).text.includes('[Pocket:'), 'told once');
+      await s.idle(a);
     });
 
     await t.test(`${engine}: the Git panel, Results and Search answer`, async () => {

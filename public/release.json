@@ -1,7 +1,8 @@
 {
- "version": "1.98.0",
- "assetV": 191,
+ "version": "1.99.0",
+ "assetV": 192,
  "notes": [
+  "New Coordination view shows which conversation holds staging or a deploy, who is waiting, and what ended lately. Agents claim with pocket-coord, a clash names the holder, and the first waiter is woken on release. Holds are advice, not a lock. Off until you turn it on in Settings.",
   "The Git panel now lists every worktree of a repository as In use, Has work or Ready to remove, and says why. Remove only appears when nothing would be lost, names any ignored files and conversations affected, and keeps the branch. A conversation whose folder was removed carries on from your home folder and says so once.",
   "The Git panel now follows the work. It shows the repository the conversation is working in, not the folder it started in, offers a picker when it touched several, and names other running conversations in the same repository. Branch starts in that folder too and says so.",
   "Pass work to a fresh conversation with one tap. When a conversation has grown long, ask the agent to hand off (or type /handoff). It writes a briefing and the reply shows a card with the title, folder, agent and permissions, a Start button and Review first. Start opens a new conversation that begins with only the briefing, so it reads far less than the old one, and each conversation links to the other. A handoff starts once, even from two devices, and it never gets more permission than the conversation it came from. Requested by Brad.",

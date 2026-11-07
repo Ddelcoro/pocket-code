@@ -20,7 +20,7 @@ data directory, in `$TMPDIR/pocket-code-pipes-<uid>/<hash of the data directory>
 a recursive search of the install can never open one and swallow what Pocket sends. Keep the daemon, CLI/MCP
 processes and their data on the same host and OS account.
 
-The command-line tools (`pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-start`, `pocket-inbox`, `pocket-notify`)
+The command-line tools (`pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-coord`, `pocket-start`, `pocket-inbox`, `pocket-notify`)
 give up after 30 seconds without an answer from the daemon (1.73.8; before, undici's five-minute
 header timeout was the only bound, so a hung daemon held an agent's session start that long).
 
@@ -418,7 +418,7 @@ Deleting a file, by hand or by the purge, also removes its `.thumbs/` pictures, 
 purge removes any picture whose file is gone.
 
 **Agent skills.** While a library is on, Pocket installs its matching skill
-(`pocket-projects`, `pocket-files`, `pocket-tasks`, `pocket-inbox`, `pocket-vault`), and
+(`pocket-projects`, `pocket-files`, `pocket-tasks`, `pocket-inbox`, `pocket-vault`, `pocket-coord`), and
 `pocket-google` always, into `~/.claude/skills`, or
 `$CLAUDE_CONFIG_DIR/skills` if that is set, and into `$CODEX_HOME/skills` when the Codex
 home exists. Terminal and code-server agents on the host see them too. Pocket rewrites
@@ -427,7 +427,7 @@ a folder that carries its `.pocket-managed` marker; a skill of the same name tha
 wrote is left alone and the daemon logs that. `POCKET_SKILLS=0` turns installation off.
 Set it for any test or second daemon so it does not write into the real skill folders.
 
-**CLI token.** `pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-inbox`, `pocket-start`,
+**CLI token.** `pocket-board`, `pocket-docs`, `pocket-tasks`, `pocket-coord`, `pocket-inbox`, `pocket-start`,
 `pocket-notify`, `pocket-vault` and the browser relay find the daemon at `POCKET_URL` when set,
 else the address in `cli-url`, then `PORT` from this checkout's `.env`, and only then an inherited
 `PORT`. They read `cli-token` from the data directory and send it as a bearer

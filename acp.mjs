@@ -16,7 +16,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { LineBuffer } from './codex.mjs';
 import { ApprovalInbox } from './approvals.mjs';
 import { QuestionInbox } from './questions.mjs';
@@ -369,10 +369,16 @@ async function openAcpSession({ sessionId, cwd, model, cmd, args, env, resume, i
     if (resume && sessionId) { const c = cwd || await sessionCwd(client, sessionId); opened = await client.loadSession({ sessionId, cwd: c && !fs.existsSync(c) ? HOME : c || '/', mcpServers: [] }); } // 1.98: its folder may be gone
     else { opened = await client.newSession({ cwd, mcpServers: [] }); sid = opened?.sessionId; }
     if (!sid) throw new Error('acp: no session id');
-    const session = { sessionId: sid, client, cwd, config: opened?.configOptions || [], turn: null, instructionsFile, askKey, lastActivityAt: Date.now(), commands: [], context: null };
+    const session = { sessionId: sid, client, cwd, config: opened?.configOptions || [], turn: null, instructionsFile, askKey, runnerToken: env?.POCKET_RUNNER_TOKEN || null, lastActivityAt: Date.now(), commands: [], context: null };
     acpSessions.set(sid, session);
     return session;
   } catch (e) { client.close(); throw e; }
+}
+// 1.99: which conversation a command came from, as with Claude and Codex.
+const sameToken = (a, b) => Boolean(a && b) && timingSafeEqual(createHash('sha256').update(String(a)).digest(), createHash('sha256').update(String(b)).digest());
+export function sessionForRunnerToken(token) {
+  for (const s of acpSessions.values()) if (sameToken(s.runnerToken, token) && !s.client.closed) return s;
+  return null;
 }
 
 // Point the session at the model (and effort) this turn asked for, through OpenCode's config options.
