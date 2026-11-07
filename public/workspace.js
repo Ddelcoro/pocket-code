@@ -325,13 +325,27 @@ function openDock(kind,id){if(kind==='results')return openResults(id);if(kind===
 function restoreDock(){if(hasDockRoom()&&['results','queue','git'].includes(dockKind)||hasDockRoom()&&dockKind==='side'&&SideChat.available(chatId))openDock(dockKind,chatId);}
 async function openGit(id){
  const scrim=document.createElement('div');scrim.className='scrim';const sh=document.createElement('div');sh.className='sheet git-sheet';
- sh.innerHTML='<h2>Git workspace</h2><p class="sheet-help">Current changes in this repository, including work from other conversations. Read only.</p><button class="chip" data-git-refresh>Refresh</button><div data-git-status role="status">Reading repository…</div><div data-git-files></div><div data-git-diff></div>';
- workspaceMount(scrim,sh,'git');let generation=0;
+ sh.innerHTML='<h2 data-git-title>Git workspace</h2><label class="git-pick" data-git-pick hidden><span>Repository</span><select data-git-folder></select></label><p class="git-also" data-git-also hidden></p><p class="sheet-help">Current changes in this repository, including work from other conversations. Read only.</p><button class="chip" data-git-refresh>Refresh</button><div data-git-status role="status">Reading repository…</div><div data-git-files></div><div data-git-diff></div>';
+ workspaceMount(scrim,sh,'git');let generation=0,folder='',folders=[];
+ const gitPath=(tail,extra='')=>'/session/'+encodeURIComponent(id)+tail+(folder?(extra?extra+'&':'?')+'folder='+encodeURIComponent(folder):extra);
+ const shortName=p=>String(p||'').split('/').filter(Boolean).pop()||p;
+ // 1.97: the panel follows the conversation, so it reads which folders that is first. If that read fails it still opens on the starting folder.
+ const readFolders=async()=>{
+  let f;try{f=await api('/session/'+encodeURIComponent(id)+'/folders');}catch{return;}
+  if(!sh.isConnected)return;folders=f.folders||[];
+  if(!folders.some(x=>x.root===folder))folder=f.active||'';
+  const pick=sh.querySelector('[data-git-pick]'),select=sh.querySelector('[data-git-folder]');pick.hidden=folders.length<2;
+  select.innerHTML=folders.map(x=>`<option value="${esc(x.root)}">${esc(shortName(x.root))} · ${esc(x.branch)}</option>`).join('');select.value=folder;
+  const also=sh.querySelector('[data-git-also]'),rows=(f.also||[]).slice(0,3);also.hidden=!rows.length;
+  also.innerHTML=rows.length?'Also working here: '+rows.map(r=>`<a href="#/chat/${encodeURIComponent(r.id)}">${esc(r.title)}</a>`).join(', '):'';
+ };
  const load=async()=>{
   const token=++generation;sh.querySelector('[data-git-diff]').replaceChildren();const btn=sh.querySelector('[data-git-refresh]');btn.disabled=true;
   try{
-   const d=await api('/session/'+encodeURIComponent(id)+'/workspace');if(!sh.isConnected||token!==generation)return;
-   sh.querySelector('[data-git-status]').textContent=d.branch+' · '+d.total+' changed '+(d.total===1?'file':'files')+' · '+new Date(d.checkedAt).toLocaleTimeString();
+   await readFolders();if(!sh.isConnected||token!==generation)return;
+   const d=await api(gitPath('/workspace'));if(!sh.isConnected||token!==generation)return;
+   sh.querySelector('[data-git-title]').textContent=folder?'Working in '+shortName(folder)+' · '+d.branch:'Git workspace';
+   sh.querySelector('[data-git-status]').textContent=(folder?'':d.branch+' · ')+d.total+' changed '+(d.total===1?'file':'files')+' · '+new Date(d.checkedAt).toLocaleTimeString();
    sh.querySelector('[data-git-files]').innerHTML=d.files.map((f,i)=>`<button class="git-file" data-git-file="${i}" ${f.inspectable?'':'disabled'}><code>${esc(f.status)}</code><span>${esc(f.path)}${!f.inspectable?' · Preview unavailable':''}</span></button>`).join('')+(d.limited?'<p class="sheet-help">Showing the first 250 files.</p>':'');
    sh.querySelectorAll('[data-git-file]').forEach(b=>b.onclick=()=>showDiff(d.files[Number(b.dataset.gitFile)],'working'));
   }catch(e){if(sh.isConnected){sh.querySelector('[data-git-status]').textContent=e.message;sh.querySelector('[data-git-files]').replaceChildren();}}
@@ -340,9 +354,10 @@ async function openGit(id){
  const showDiff=async(file,scope)=>{
   const token=++generation,target=sh.querySelector('[data-git-diff]');target.innerHTML=`<h3>${esc(file.path)}</h3><div class="git-scopes"><button class="chip" data-scope="working" aria-pressed="${scope==='working'}">Working tree</button><button class="chip" data-scope="staged" aria-pressed="${scope==='staged'}">Staged</button></div><pre tabindex="0" aria-label="File diff">Loading diff…</pre>`;
   target.querySelectorAll('[data-scope]').forEach(b=>b.onclick=()=>showDiff(file,b.dataset.scope));
-  try{const d=await api('/session/'+encodeURIComponent(id)+'/workspace/diff?path='+encodeURIComponent(file.path)+'&scope='+scope);if(sh.isConnected&&token===generation)target.querySelector('pre').textContent=d.text;}
+  try{const d=await api(gitPath('/workspace/diff','?path='+encodeURIComponent(file.path)+'&scope='+scope));if(sh.isConnected&&token===generation)target.querySelector('pre').textContent=d.text;}
   catch(e){if(sh.isConnected&&token===generation)target.querySelector('pre').textContent=e.message;}
  };
+ sh.querySelector('[data-git-folder]').onchange=e=>{folder=e.target.value;load();};
  sh.querySelector('[data-git-refresh]').onclick=load;await load();
 }
 function keyboardHelp(){

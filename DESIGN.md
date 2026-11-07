@@ -1078,3 +1078,12 @@ and permissions, then three lines of the briefing. **Start** is the one `--clay`
 are 44px tall. A started card collapses to its head line with a link, an expired one to a sentence. A missing folder turns
 Start off and adds a `--dim` note; nothing is `--warn` because nothing is wrong yet. The card is `role="group"`, not a
 landmark, because a reply can hold two. No motion.
+
+## Git panel folders (1.97)
+
+Pinned Operate refinement (design-studio → impeccable): variance 2, motion 1, density 7; existing tokens, no new colour. Read:
+the panel has to say which repository it is showing before anything else, because that is the question it was failing to
+answer. The `h2` carries it: `Working in <folder> · <branch>`, wrapping anywhere so a long branch stays on the phone. A native
+`select` in `.git-pick` appears only with two or more repositories (44px, `--surface`, `--line`), because a phone already has
+the right control for this. `.git-also` is one `--dim` line with plain links. No `--warn`: two conversations in a folder is
+worth knowing, not a fault. The Branch sheet adds `Starts in <folder>.` to its existing note. No motion.

@@ -176,10 +176,16 @@ Open** in Results). **Settings → Projects, files, tasks & vault → Keep files
 - **Changed files** (the diff button in the header, or **Conversation options → Changed files**) lists every file this
   conversation edited or wrote, read from its transcript, with the before and after of each edit. Failed edits are counted
   but not shown. Codex conversations show each edit's diff (since 1.87); OpenRouter's show before and after, as Claude's do.
-- **Git** in the header shows the whole working tree of the conversation's repository: branch, changed files and their
-  diffs, including changes made by other conversations or by hand. It is read-only. Pick a file to see its **Working tree** or
-  **Staged** diff. Untracked files are listed without content. The Git button is hidden when the conversation's folder is
-  not in a Git repository, or when the folder or its repository is outside the server user's home directory.
+- **Git** in the header shows the whole working tree of the repository the conversation is working in: branch, changed files
+  and their diffs, including changes made by other conversations or by hand. It is read-only. Pick a file to see its
+  **Working tree** or **Staged** diff. Untracked files are listed without content. The panel follows the work, not the folder
+  the conversation began in: its title reads `Working in <folder> · <branch>`, and it opens on the repository of the last
+  file the agent edited, then the last folder it worked in that is in a repository, then the starting folder. If the
+  conversation touched more than one repository, **Repository** lists up to six, newest first. **Also working here** names
+  other running conversations in the same repository, each with a link. The Git button is hidden until the conversation has
+  worked in a repository inside the server user's home directory. Claude conversations are read from the folder on each
+  transcript line and the files they edit, Codex conversations from each command's working folder and the paths in its
+  patches. OpenRouter conversations stay on their starting folder.
 
 Git limits: the first 250 changed files, 256 KB per diff. The repository must be inside the server user's home directory.
 Files in hidden folders, symlinks that point outside the repository, and names that look like keys or credentials
@@ -295,6 +301,8 @@ commands, with the permissions chosen for it. The original conversation stays as
    settings for its next reply. If this conversation is still working, the sheet warns that both will work in the same
    folder, so keep them off the same files.
 4. Choose **Start branch**.
+
+The branch starts in the folder the work is in, the same one the [Git panel](#see-what-the-agent-changed) opens on, and the sheet names it (`Starts in <folder>.`). A conversation that began in `~` and moved into a repository branches in that repository.
 
 The branch opens at once. Its title is `Branch: …` with the start of your instruction until a proper title is ready. It
 shows **Branch of …** under its header, linking back, and the original lists its branches the same way (the first three,
@@ -471,7 +479,7 @@ Variables go in the Pocket Code directory's `.env`; restart Pocket after changin
 | No suggested-reply buttons | The reply is still running, the box has text, they were dismissed, the conversation was run outside Pocket, `POCKET_CHOICES=0`, or Codex's `config.toml` sets `developer_instructions`. | Clear the box, or check the configuration. |
 | "This result is not available. It may have moved or been removed." | The file named in the reply no longer exists at that path. | Ask the agent where the file is now. |
 | "This file is not a result referenced by the conversation." | The download link was opened from another conversation or the file is not in Results. | Open it from Results in the conversation that mentions it. |
-| Git: "This workspace is not an available Git repository." | The conversation's folder is not in a repository. | Nothing to fix; Git only shows repositories. |
+| Git: "This workspace is not an available Git repository." | The conversation hasn't worked in a repository. | Nothing to fix; Git only shows repositories. |
 | No Git button in a conversation that is in a repository | The conversation runs in a folder outside the server user's home, or its repository starts above home. Git only reads repositories inside home, so the button is not shown there. | Use Changed files for that conversation's edits. |
 | Git: "This diff exceeds the 256 KB preview limit." | The diff is too large to preview. | Ask the agent for a summary or inspect it in an editor. |
 | Side chat: "Send a message in the conversation first…" | The conversation has no transcript yet. | Send a first message, then ask again. |

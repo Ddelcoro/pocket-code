@@ -349,6 +349,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname.endsWith('/questions'))return json({supported:url.pathname.includes('cx:'),requests:questionRequests});
  if(url.pathname.endsWith('/questions/request-1/answer')){let raw='';for await(const c of req)raw+=c;questionAnswers=JSON.parse(raw).answers;questionRequests=[];return json({ok:true});}
+ if(url.pathname.endsWith('/folders'))return json({active:'/home/work/inventory',activePath:'/home/work/inventory/src',repo:true,start:'/home/work',also:[{id:'f00d0000-0000-4000-8000-0000000000aa',title:'Stock count export'}],folders:[{path:'/home/work/inventory/src',root:'/home/work/inventory',branch:'feature/inventory',isWorktree:false,lastUsedAt:2,source:'edit'},{path:'/home/work/reports',root:'/home/work/reports',branch:'main',isWorktree:true,lastUsedAt:1,source:'cwd'}]});
  if(url.pathname.endsWith('/workspace'))return json({branch:'feature/inventory',total:2,checkedAt:Date.now(),files:[{path:'report.csv',status:' M',inspectable:true},{path:'.env',status:'??',inspectable:false}]});
  if(url.pathname.endsWith('/workspace/diff'))return json({text:url.searchParams.get('scope')==='staged'?'No staged diff for this file.':'-old quantity\n+new quantity\n+<script>unsafe-looking content is literal</script>'});
  if(url.pathname.endsWith('/events')){res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache'});res.write(url.pathname.includes(rows[0].id)?': running\n\n':'data: {"type":"watch"}\n\n');if(uiModes.streamDone){uiModes.streamDone=false;res.write('data: {"type":"done"}\n\n');} /* streamDone: the next stream ends a turn once */const t=setInterval(()=>res.write(': keepalive\n\n'),1000);req.on('close',()=>clearInterval(t));return;}
@@ -544,11 +545,17 @@ try{
  assert.equal(await p.$eval('#app',e=>e.inert),false);await p.type('#box','Desktop draft remains editable.');
  await clickControl(p,`[data-id="${rows[0].id}"]`);await p.waitForFunction(id=>chatId===id&&document.querySelector('#box'),{},rows[0].id);
  await p.waitForSelector('.workspace-dock .result-row');assert.ok(await p.$$eval('#open-sessions a',e=>e.length)>=2);
- await clickControl(p,'#git-open');await p.waitForSelector('[data-git-file]');await clickControl(p,'[data-git-file="0"]');await p.waitForFunction(()=>document.querySelector('[data-git-diff] pre')?.textContent.includes('new quantity'));
+ await clickControl(p,'#git-open');await p.waitForSelector('[data-git-file]');
+ assert.equal(await p.$eval('[data-git-title]',e=>e.textContent),'Working in inventory · feature/inventory','the panel names the folder the work is in');
+ assert.equal(await p.$eval('[data-git-folder]',e=>e.value),'/home/work/inventory','it opens on the repository last edited');
+ assert.equal(await p.$$eval('[data-git-folder] option',e=>e.length),2);assert.match(await p.$eval('[data-git-also]',e=>e.textContent),/Also working here: Stock count export/);
+ await clickControl(p,'[data-git-file="0"]');await p.waitForFunction(()=>document.querySelector('[data-git-diff] pre')?.textContent.includes('new quantity'));
  assert.equal(await p.$$eval('[data-git-diff] script',e=>e.length),0);await clickControl(p,'[data-scope="staged"]');await p.waitForFunction(()=>document.querySelector('[data-git-diff] pre')?.textContent.includes('No staged'));
  await p.screenshot({path:path.join(out,'workspace-desktop.png')});await scan('workspace-desktop');
  // Resizing preserves the open panel as a phone dialog rather than dropping its contents.
- await p.setViewport({width:390,height:844});await p.waitForSelector('.git-sheet[role="dialog"]');await p.keyboard.press('Escape');
+ await p.setViewport({width:390,height:844});await p.waitForSelector('.git-sheet[role="dialog"]');
+ await p.waitForFunction(()=>getComputedStyle(document.querySelector('[data-git-folder]')).display!=='none');await p.screenshot({path:path.join(out,'git-folders-390.png')});await scan('git-folders-390');
+ await p.keyboard.press('Escape');
  questionRequests=[{id:'request-1',blocking:true,questions:[{id:'format',header:'Format',question:'Which format should the report use?',options:[{label:'CSV',description:'For spreadsheets'},{label:'PDF',description:'For reading'}]}]}];
  rows[1].state={kind:'input',label:'Needs your answer',questions:1};
  await p.goto(base+'/#/chat/'+rows[1].id);await p.waitForSelector('#questions-open:not([hidden])');

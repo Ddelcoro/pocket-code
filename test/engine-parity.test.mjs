@@ -77,6 +77,25 @@ test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', {
       else { const p = s.prompts('acp').find(x => x.text.startsWith('parity one acp')); assert.match(p?.seen?.instructions || '', /choices/, 'OpenRouter got them in its instruction file'); }
     });
 
+    await t.test(`${engine}: the Git panel reads only folders this conversation worked in`, async () => {
+      const made = await s.start(engine, `parity folders ${engine}`); await s.idle(made);
+      const id = encodeURIComponent(made);
+      const folders = await s.call(`/session/${id}/folders`);
+      assert.equal(folders.status, 200); assert.ok(Array.isArray(folders.body.folders)); assert.equal(folders.body.start, s.cwd);
+      const refused = await s.call(`/session/${id}/workspace?folder=${encodeURIComponent('/etc')}`);
+      assert.equal(refused.status, 403, 'a folder this conversation never used is refused');
+    });
+    if (engine === 'claude') await t.test('claude: a branch starts in the folder the work moved to', async () => {
+      const work = path.join(s.home, 'moved-repo'); fs.mkdirSync(work); spawnSync('git', ['init', '-q'], { cwd: work });
+      const id = await s.start('claude', 'parity branch folder'); await s.idle(id);
+      const transcript = name => fs.readdirSync(path.join(s.dir, 'sessions'), { recursive: true }).map(f => path.join(s.dir, 'sessions', f)).find(f => f.endsWith(name + '.jsonl'));
+      fs.appendFileSync(transcript(id), JSON.stringify({ type: 'user', sessionId: id, cwd: work, timestamp: new Date().toISOString() }) + '\n');
+      await s.until(async () => (await s.call(`/session/${s.e(id)}/folders`)).body.active === fs.realpathSync(work), 6000, 'the move to show');
+      const branch = await s.call(`/session/${s.e(id)}/branch`, { text: 'carry on', clientMessageId: 'parity-branch-folder' });
+      assert.equal(branch.status, 202); await s.idle(branch.body.id);
+      const last = fs.readFileSync(transcript(branch.body.id), 'utf8').trim().split('\n').map(l => JSON.parse(l)).at(-1);
+      assert.equal(fs.realpathSync(last.cwd), fs.realpathSync(work));
+    });
     await t.test(`${engine}: a handoff starts once, on the engine it names`, async () => {
       const made = await s.call('/start', { text: `parity handoff ${engine}`, directory: s.cwd, provider: engine, kind: 'handoff' });
       assert.equal(made.status, 200, JSON.stringify(made.body));
@@ -92,7 +111,9 @@ test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', {
     await t.test(`${engine}: a choices block becomes reply buttons`, async () => {
       const id = await s.start(engine, `parity choices ${engine} __CHOICES__`);
       const evs = await s.sse(id, ev => ev.type === 'done' || ev.type === 'idle');
-      const blocks = evs.filter(ev => ev.type === 'assistant').flatMap(ev => ev.msg?.blocks || []);
+      let blocks = evs.filter(ev => ev.type === 'assistant').flatMap(ev => ev.msg?.blocks || []);
+      // a fake can finish before the stream opens; the reply is then in the history, which is what the app reads
+      if (!blocks.length) { await s.idle(id); blocks = (await s.session(id)).messages.filter(m => m.role === 'assistant').flatMap(m => m.blocks || []); }
       assert.ok(blocks.some(b => b.t === 'choices' && b.options.includes('Merge and deploy')), `${engine}: ${JSON.stringify(blocks)}`);
       assert.ok(!blocks.some(b => b.t === 'text' && /```choices/.test(b.text)), 'the raw block is not shown as text');
       await s.idle(id);

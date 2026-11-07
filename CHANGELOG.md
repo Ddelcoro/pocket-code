@@ -3,6 +3,18 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.97.0] — 2026-11-07 · build 190
+
+### Added
+- **The Git panel follows the work.** New `folders.mjs` reads which folders a conversation worked in from its transcript: the folder on each Claude line and the files it edits, the working folder and patch paths in each Codex command. Reads are incremental. The panel opens on the repository of the last edit, then the last folder in a repository, then the starting folder, and its title reads `Working in <folder> · <branch>`.
+- **Repository picker** when a conversation touched more than one, up to six, newest first.
+- **Also working here** names other running conversations in the same repository, with a link.
+- `GET /api/session/:id/folders`. `/workspace` and `/workspace/diff` take `?folder=`, limited to folders the server computed for that conversation.
+
+### Changed
+- **Git shows for a conversation that started outside a repository** once it has moved into one.
+- **Branch starts in the active folder** and its sheet names it. Checked against real Claude Code and Codex: both fork into a different folder and keep the history.
+
 ## [1.96.0] — 2026-11-07 · build 189
 
 Requested by Brad (2026-11-07, Release A of `docs/plans/coordination-worktrees-handoff.md`): a long conversation re-reads everything on each reply, and Branch carries all of it. A handoff carries only a briefing.

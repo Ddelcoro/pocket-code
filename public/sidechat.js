@@ -170,15 +170,22 @@ const Branch = (() => {
     const settings = here ? [tbLabel(modelList(), tb.prefs.model), permissionLabel(nextApprovalMode())].filter(Boolean).join(' · ') : '';
     sh.innerHTML = `<h2>Branch</h2>
       <p class="sheet-help">A new saved conversation that carries on from here. It starts with everything in this one so far, can edit files and run commands on its own, and shows in your list as a branch. This conversation stays as it is.</p>
-      ${working ? `<p class="sheet-help branch-warn" role="status">This conversation is still working. Both will work in ${folder ? esc(folder) : 'the same folder'}, so keep them off the same files.</p>` : ''}
+      ${working ? `<p class="sheet-help branch-warn" role="status">This conversation is still working. Both will work in <span data-branch-where>${folder ? esc(folder) : 'the same folder'}</span>, so keep them off the same files.</p>` : ''}
       <label class="branch-label" for="branch-text">What should the branch do?</label>
       <textarea class="queue-editor" id="branch-text" placeholder="For example: write the export script we discussed"></textarea>
-      <p class="sheet-help branch-note">${settings ? 'Uses ' + esc(settings) + '. ' : ''}Its first reply reads the whole conversation again.</p>
+      <p class="sheet-help branch-note"><span data-branch-folder></span>${settings ? 'Uses ' + esc(settings) + '. ' : ''}Its first reply reads the whole conversation again.</p>
       <button class="primary" data-branch-start>Start branch</button>
       <div class="branch-alt"><span>Only want to ask something?</span><button type="button" class="chip" data-branch-side>${IC.chat}Use side chat instead</button></div>`;
     mountSheet(scrim, sh);
     const box = sh.querySelector('textarea'), go = sh.querySelector('[data-branch-start]');
     box.value = text; box.focus();
+    // 1.97: a branch starts where the work is, which may not be the folder the conversation began in
+    api(`/session/${encodeURIComponent(parentId)}/folders`).then(f => {
+      const name = String(f.activePath || '').split('/').filter(Boolean).pop();
+      if (!name || !sh.isConnected) return;
+      sh.querySelector('[data-branch-folder]').textContent = `Starts in ${name}. `;
+      const where = sh.querySelector('[data-branch-where]'); if (where) where.textContent = name;
+    }).catch(() => { });
     const clientMessageId = crypto.randomUUID(); // a double tap is one branch
     go.onclick = async () => {
       const t = box.value.trim(); if (!t) { toast('Say what the branch should do.'); return box.focus(); }
