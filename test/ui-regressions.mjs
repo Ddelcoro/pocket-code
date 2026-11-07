@@ -2857,10 +2857,17 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
      await clickControl(page,'#inbox-watch');await page.waitForSelector('.watch-sheet #w-save');
      await page.waitForFunction(()=>[...document.querySelectorAll('.watch-sheet')].every(e=>e.getAnimations({subtree:true}).every(a=>a.playState==='finished')));
      assert.match(await page.$eval('#w-status',e=>e.textContent),/^Checking every 5 minutes now\. Last check .*Using the watcher’s config file\.$/);
-     assert.deepEqual(await page.$$eval('.watch-sheet .vault-set-head',h=>h.map(x=>x.textContent)),['Your rules','Your list in Gmail','Schedule','Quiet hours and summaries','Keep the Inbox tidy','Models','First pass','Cost, last 7 days']);
+     assert.deepEqual(await page.$$eval('.watch-sheet .vault-set-head',h=>h.map(x=>x.textContent)),['Your rules','Your list in Gmail','What it reads','Schedule','Quiet hours and summaries','Keep the Inbox tidy','Models','First pass','Cost, last 7 days']);
      assert.equal(await page.$eval('#w-digest',e=>e.options[0].textContent),'Off','1.95: the morning digest can be off');assert.match(await page.$eval('#w-quiet-note',e=>e.textContent),/wait for the morning digest/);
      await page.select('#w-digest','off');assert.match(await page.$eval('#w-quiet-note',e=>e.textContent),/arrive one by one when quiet hours end/,'the note follows the choice');
      await page.select('#w-digest','8');
+     // 1.100: what it reads. Everything by default with the chips hidden; the choice shows them, and a long label stays inside the sheet at a tappable height
+     assert.equal(await page.$eval('#w-scope',e=>e.value),'all','1.100: Everything is the default');assert.equal(await page.$eval('#w-scope-labels',e=>e.hidden),true,'no chips on Everything');
+     await page.select('#w-scope','inbox_labels');assert.equal(await page.$eval('#w-scope-labels',e=>e.hidden),false,'the label choice shows the chips');
+     assert.deepEqual((await page.$$eval('[data-scope-label]',b=>b.map(x=>x.dataset.scopeLabel))).slice(0,2),['Customers','Billing/Invoices'],'the labels the watcher listed');
+     assert.equal(await page.$$eval('[data-scope-label]',b=>{const s=document.querySelector('.watch-labels').getBoundingClientRect();return b.every(x=>{const r=x.getBoundingClientRect();return r.left>=s.left-1&&r.right<=s.right+1&&r.height>=36;});}),true,'chips fit at '+w);
+     await scan('inbox-watch-labels-'+w);
+     await page.select('#w-scope','all');assert.equal(await page.$eval('#w-scope-labels',e=>e.hidden),true,'back to Everything hides them');
      assert.equal(await page.$eval('#w-label',e=>e.getAttribute('aria-pressed')),'true','1.75: the Pocket Inbox label, on by default');assert.match(await page.$eval('#w-label',e=>e.textContent),/Keep a Pocket Inbox label in Gmail/);assert.equal(await page.$('#w-label-off'),null);
      assert.equal(await page.$eval('#w-rules',e=>getComputedStyle(e,'::placeholder').fontStyle),'italic','the placeholder reads as guidance');
      assert.match(await page.$eval('#w-rules',e=>e.placeholder),/^Write your instructions here/);
@@ -2885,11 +2892,13 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
     for(const d of [5,6])await clickControl(page,`.watch-period:last-child [data-day="${d}"]`);
     await page.$eval('.watch-period:last-child [data-from]',e=>{e.value='07:00';});await page.$eval('.watch-period:last-child [data-to]',e=>{e.value='19:00';});await page.select('.watch-period:last-child [data-every]','5');
     await page.select('#w-every','15');await page.select('#w-fp-threshold','0.9');await page.select('#w-tidy-every','4');await page.$eval('#w-rules',e=>{e.focus();e.setSelectionRange(e.value.length,e.value.length);});await page.keyboard.type('- Never tell me about cameras that go offline.\n');await page.select('#w-fp-provider','both');await page.select('#w-models [data-job="decisions"] [data-model]','haiku');await page.select('#w-la-evening','off');
+    await page.select('#w-scope','inbox_labels');await clickControl(page,'[data-scope-label="Customers"]');await page.type('#w-scope-add','Vendors');await clickControl(page,'#w-scope-add-btn'); // 1.100: a picked and a typed label
     await clickControl(page,'#w-label');
     await clickControl(page,'#w-save');await page.waitForSelector('#w-reset');
     const saved=await page.evaluate(()=>fetch('/api/inbox/watch').then(r=>r.json()));
     assert.equal(saved.revision,1);assert.equal(saved.settings.every,15);assert.equal(saved.settings.lookahead.evening,null);assert.deepEqual(saved.settings.models.decisions,{model:'haiku',reasoning:'medium'});assert.deepEqual(saved.settings.firstPass,{enabled:true,provider:'both',threshold:0.9});assert.deepEqual(saved.settings.tidy,{enabled:true,every:4});assert.match(saved.settings.rules,/Every sale from the web store over \$500[\s\S]*Never tell me about cameras that go offline\./,'the rules are saved with the settings');
     assert.deepEqual(saved.settings.gmailLabel,{enabled:false},'1.75: turned off and saved');
+    assert.deepEqual(saved.settings.scope,{mode:'inbox_labels',labels:['Customers','Vendors']},'1.100: the scope and its labels save');
     assert.deepEqual(saved.settings.periods[1],{name:'Work hours',days:[0,1,2,3,4],from:'07:00',to:'19:00',every:5});
     assert.match(await page.$eval('#w-status',e=>e.textContent),/Your last change reaches the watcher within a minute\./);
     // a period with no day is refused before it leaves the page
@@ -2909,7 +2918,7 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
     await page.keyboard.press('Escape');
     settings.assistantMode=true;await page.setViewport({width:390,height:844});await page.goto(base+'/#/inbox');await page.reload();await page.waitForSelector('#inbox-watch');
     await clickControl(page,'#inbox-watch');await page.waitForSelector('.watch-sheet #w-save');
-    assert.deepEqual(await page.$$eval('.watch-sheet .vault-set-head',h=>h.map(x=>x.textContent)),['Your rules','Your list in Gmail','Schedule','Quiet hours and summaries','Keep the Inbox tidy']);
+    assert.deepEqual(await page.$$eval('.watch-sheet .vault-set-head',h=>h.map(x=>x.textContent)),['Your rules','Your list in Gmail','What it reads','Schedule','Quiet hours and summaries','Keep the Inbox tidy']);
     assert.doesNotMatch(await page.$eval('.watch-sheet',e=>{const c=e.cloneNode(true);c.querySelector('#w-rules')?.remove();return c.textContent;}),/Sonnet|Haiku|Opus|\$/,'no model names or dollars (the owner\'s own rules may mention money)');
     await scan('inbox-watch-assistant-390');
    }finally{Object.assign(settings,before);await page.evaluate(()=>fetch('/api/inbox/reset',{method:'POST'}));if(vp)await page.setViewport(vp);await page.goto(base+'/#/');}

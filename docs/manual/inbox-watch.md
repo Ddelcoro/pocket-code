@@ -209,6 +209,12 @@ the watcher picks it up within a minute, and the line says *Your last change rea
 until it has. **Use the config file's settings** hands control back to `config.toml`.
 
 - **Pause Inbox Watch**: no checks, digests or look-aheads until you turn it off.
+- **What it reads** (1.100): which mail the watcher looks at. **Everything** is every thread but spam, trash and drafts, so mail
+  your Gmail filters archive or file away is judged too (the behaviour before 1.100). **Inbox only** reads what is in your Gmail
+  inbox. **Inbox and these labels** adds the Gmail labels you pick from the chips (your labels appear once the watcher has read
+  them; **Add** takes a name it has not listed). Mail outside the scope is never fetched or judged, for alerts or the digest; an
+  email you label Pocket Inbox always joins the check, your replies count wherever the thread sits, so the watcher sees that you
+  answered, and the research the judge does on a story is not bounded. A new email you start yourself is not read.
 - **Your rules**: your own words about what you always or never want to hear about ("Tell me when a customer asks for
   a quote", "Never alert me about newsletters"). The watcher follows them in every decision, the first pass, the
   look-ahead and the tidy pass, and they win over its own judgment, even for something it would call critical. The

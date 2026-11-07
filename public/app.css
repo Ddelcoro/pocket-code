@@ -1980,6 +1980,13 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 .inbox-item-card.state-resolved, .inbox-item-card.state-not_useful, .inbox-item-card.state-dismissed { opacity: .72; }
 .inbox-lead { margin-bottom: 12px; }
 .inbox-rest { margin-top: 10px; color: var(--dim); font-size: 13.5px; }
+.watch-labels { margin: 6px 14px 0; } /* 1.100: the scope's label chips */
+.watch-labels[hidden] { display: none; }
+.watch-label-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
+.watch-label-chips .chip { flex: none; min-height: 36px; padding: 6px 14px; font-weight: 500; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.watch-label-chips .chip[aria-pressed="true"] { color: var(--clay); border-color: var(--clay); background: var(--clay-deep); }
+.watch-label-add { margin-top: 8px; }
+.watch-label-add .watch-name { flex: 1; }
 .inbox-item-listed { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; } /* 1.95: a line already on the list links to its entry */
 .inbox-item-listed a { color: var(--clay); font-weight: 600; text-decoration: none; }
 .inbox-item-listed .inbox-item-state { margin: 0 0 0 4px; font-size: 13px; }

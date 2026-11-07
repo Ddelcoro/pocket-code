@@ -3,6 +3,17 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.100.0] — 2026-11-07 · build 193
+
+Requested by Damon and Brad (2026-11-07): the watcher fetched every thread but spam, trash and drafts, so mail Gmail filters archive or file away was judged too (on Damon's mailbox, 233 of 452 judged threads in a week never carried INBOX). Built by Damon on #226 and rebased here after 1.95.0 shipped.
+
+- **What it reads: a setting.** `scope` `{mode: all | inbox | inbox_labels, labels}` in the Inbox Watch settings (`checkWatch`, `WATCH.scope`; TOML `[mail] scope`, `scope_labels`; `schedule.scope_query`). The default is `all`, so nothing changes until the owner chooses: the searches and the history read are the same as before. The bound applies to the per-check fetch, the first-run baseline, the rebaseline and the blind-mailbox probe; research and archive searches, and a thread the owner labels Pocket Inbox, are not bounded.
+- **The owner's replies stay in a narrowed scope.** A reply carries neither INBOX nor the thread's filter label, so a scope alone would hide the way the watcher learns a story was answered. The read of new mail adds `in:sent` (`scope_query(..., sent=True)`); on the Gmail API path a sent message is kept when its thread has more than one message (`Gmail.is_reply`), and on the Claude connector when the search says so (`new_outbound`). A new email the owner starts stays out. Codex's search lists single emails and does not give a thread's length, so there a sent email is read.
+- **The label picker.** The watcher lists the owner's Gmail labels once a day (`label_names`, `options.labels` on the heartbeat), from the Gmail API or the Claude transport; a failure keeps the last list and never fails a check. Codex's Gmail app cannot list labels, so there **Add** takes a typed name.
+- **A setting group your saved settings predate shows in the sheet.** `inboxWatchSheet` fills `scope`, `tidy`, `firstPass` and `gmailLabel` from the watcher's defaults when saved settings have none. Label chips wrap and size to their names.
+- Manual: *What it reads* under Inbox Watch; `inbox-watch/README.md`, `examples/config.example.toml`.
+- Tests: `inbox.test.mjs` (the scope setting checked); `test_schedule.py` (defaults, Pocket and TOML forms, `scope_query`); `test_connector.py` (the scope reaches the window search, the baseline and the probe, not the archive search; replies kept and a new email dropped on both paths; a 404 on one thread is not an expired cursor; Everything asks nothing extra).
+
 ## [1.99.0] — 2026-11-07 · build 192
 
 ### Added
