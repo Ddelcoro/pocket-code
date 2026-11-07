@@ -250,6 +250,14 @@ def test_the_scope_reaches_every_fetch():
     assert b.mail().scope == "" and "in:inbox" not in (b.mail().baseline_threads() or searches(b)[-1]["query"])
 
 
+def test_list_labels_names_the_owners_labels():
+    """1.95: the scope picker's label list, from the Claude transport; Gmail's own labels (INBOX) are left out, names sorted."""
+    b = Box()
+    b.data["labels"] = {"Ultra/Ask first": "Label_174", "Clients": "Label_2"}
+    b.save()
+    assert b.mail().list_labels() == ["Clients", "Ultra/Ask first"]
+
+
 def test_paging_stops_at_mail_already_seen():
     """The date window holds a day or two of seen mail; pages are newest first and stop once a page has nothing unseen."""
     b = Box()

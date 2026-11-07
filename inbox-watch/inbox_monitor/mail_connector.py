@@ -247,6 +247,19 @@ class ClaudeConnector:
             self.labels_file.write_text(json.dumps({**known, name: found}))
         return found
 
+    def list_labels(self) -> list[str]:
+        """The owner's own labels (not Gmail's system ones), for the scope setting's picker (1.95)."""
+        res = self.call([(PREFIX + "list_labels", {})], labels=True, allow={"names": [], "threads": [], "labels": []})["labels"]
+        if isinstance(res, MailError):
+            raise res
+        out = []
+        for x in _label_list(res):
+            name = str(x.get("name") or x.get("displayName") or "")
+            kind = str(x.get("type") or x.get("labelType") or "").lower()
+            if name and kind != "system" and not (kind == "" and name.isupper()):
+                out.append(name)
+        return sorted(dict.fromkeys(out), key=str.lower)
+
     def change_threads(self, changes: list[tuple[str, list[str], list[str]]]) -> set[str]:
         """Apply [(thread id, add label ids, remove label ids)] in one locked run; the thread ids that took every change."""
         reqs: list[tuple[str, dict]] = []
@@ -694,16 +707,12 @@ class ConnectorMail:
         return f"{query} {self.scope}".strip() if self.scope else query
 
     def list_labels(self) -> list[str]:
-        """The owner's own Gmail labels (not the system ones), for the scope setting's picker."""
-        res = self.call([(PREFIX + "list_labels", {})], labels=True, allow={"names": [], "threads": [], "labels": []})["labels"]
-        if isinstance(res, MailError):
-            raise res
-        out = []
-        for x in _label_list(res):
-            name = str(x.get("name") or x.get("displayName") or "")
-            if name and str(x.get("type") or x.get("labelType") or "user").lower() != "system" and not name.isupper():
-                out.append(name)
-        return sorted(dict.fromkeys(out), key=str.lower)
+        """The owner's own Gmail labels, from a Claude transport (the main one or the fallback); Codex's Gmail app cannot list them."""
+        ts = [self.fetch.primary, self.fetch.backup] if hasattr(self.fetch, "primary") else [self.fetch]
+        t = next((x for x in ts if hasattr(x, "list_labels")), None)
+        if t is None:
+            raise MailError(501, "this Gmail connector cannot list labels")
+        return self._use("label", 1, t.list_labels)
 
     def baseline_threads(self, query: str | None = None, cap: int = 60) -> set[str]:
         found = self._search(self.scoped(query or self.baseline_query), cap, "fetch")
