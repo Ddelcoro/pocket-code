@@ -1022,7 +1022,7 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    await chat();await clickControl(page,'#chatmore');await page.waitForSelector('.sheet .opt-group');
    const groups=await page.$$eval('.sheet .opt-group',gs=>gs.map(g=>({label:g.getAttribute('aria-label'),ids:[...g.querySelectorAll('button.opt')].map(b=>b.id),size:Boolean(g.querySelector('.chat-text-settings'))})));
    assert.deepEqual(groups.map(g=>g.label),['This conversation','Organize','Server process','Display and version']);
-   assert.deepEqual(groups[0].ids,['so-find','so-changes','so-side','so-branch','so-agents','so-usage'],'1.78/1.79: Side chat and Branch sit with the conversation tools');
+   assert.deepEqual(groups[0].ids,['so-find','so-changes','so-side','so-branch','so-handoff','so-agents','so-usage'],'1.78/1.79: 1.102: Side chat, Branch and Handoff sit with the conversation tools');
    assert.ok(groups.at(-1).size&&groups.at(-1).ids.includes('so-version'));
    assert.ok(await page.$eval('#so-find',e=>e.getBoundingClientRect().bottom<innerHeight),'the first action is in view on a phone');
    await scan('session-options-grouped-mobile');await page.screenshot({path:path.join(out,'session-options-grouped-mobile.png')});

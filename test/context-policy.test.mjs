@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {createHmac,randomUUID} from 'node:crypto';
-import {readPolicy,cleanPolicy,claudeLaunch,codexLaunch,claudeWorkerFor,codexWorkerFor,isDefaultPolicy,launchKey,DEFAULT_POLICY} from '../context-policy.mjs';
+import {readPolicy,cleanPolicy,claudeLaunch,codexLaunch,claudeWorkerFor,codexWorkerFor,isDefaultPolicy,launchKey,DEFAULT_POLICY,handoffOfferAt,isHandoffOffer,HANDOFF_CHOICES} from '../context-policy.mjs';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const repo=path.resolve(import.meta.dirname,'..');
 const cleanEnv=()=>Object.fromEntries(Object.entries(process.env).filter(([k])=>!/^(POCKET|VAPID)_/.test(k)));
@@ -49,6 +49,21 @@ test('settings patches are checked and merged over the saved policy',()=>{
  for(const bad of [null,[],'x',{compaction:{mode:'handoff'}},{compaction:{limit:10}},{compaction:{limit:2e6}},{compaction:{limit:200000.5}},{workers:{model:'haiku'}},{workers:{effort:'max'}},{workers:'x'}])
   assert.ok(cleanPolicy(bad,null).error,JSON.stringify(bad));
  assert.equal(cleanPolicy({workers:{effort:null}},{workers:{effort:'low'}}).policy.workers.effort,null,'null clears the effort');
+});
+
+test('1.102: the handoff offer size: the default, off, a choice, and before a lower compaction limit',()=>{
+ assert.equal(handoffOfferAt(null,null),200000,'unset is 200K');
+ assert.equal(handoffOfferAt(undefined,null),200000);
+ assert.equal(handoffOfferAt(0,null),0,'0 is off');
+ for(const n of HANDOFF_CHOICES)assert.equal(handoffOfferAt(n,null),n);
+ assert.equal(handoffOfferAt(123,null),200000,'an unreadable saved value falls back to the default');
+ assert.equal(handoffOfferAt(200000,{compaction:{mode:'limit',limit:200000}}),150000,'Compact at 200K: offer at three quarters');
+ assert.equal(handoffOfferAt(400000,{compaction:{mode:'limit',limit:300000}}),230000,'rounded to 10K');
+ assert.equal(handoffOfferAt(150000,{compaction:{mode:'limit',limit:300000}}),150000,'a limit above the offer leaves it alone');
+ assert.equal(handoffOfferAt(200000,{compaction:{mode:'agent',limit:150000}}),200000,'the agent’s own compaction: no change');
+ assert.equal(handoffOfferAt(0,{compaction:{mode:'limit',limit:150000}}),0,'off stays off');
+ for(const v of [null,0,...HANDOFF_CHOICES])assert.ok(isHandoffOffer(v));
+ for(const v of [undefined,'200000',1,600000,-1,200000.5,false])assert.ok(!isHandoffOffer(v),String(v));
 });
 
 async function server(t,port,extraEnv={}){
@@ -100,10 +115,20 @@ test('Settings saves the policy and every new Claude and Codex process starts wi
  const cx=await s.call('/new',{cwd:repo,provider:'codex',text:'codex',clientMessageId:randomUUID()});assert.equal(cx.status,202);
  assert.ok(await s.until(()=>s.lines('calls.threads').length>=1));
  assert.deepEqual(s.lines('calls.threads')[0].config,{model_auto_compact_token_limit:170000,'agents.default_subagent_model':'gpt-6.1-sol','agents.default_subagent_reasoning_effort':'low'});
+ // 1.102: the handoff offer follows the compaction limit (200K → offer at 150K) and is its own setting.
+ assert.equal(ok.body.contextPolicy.handoff.at,150000);
+ assert.equal((await s.call('/me')).body.features.handoffAt,150000);
+ const changes=()=>s.logs().split('context policy changed').length;const before=changes();
+ const hbad=await s.call('/settings',{handoffOffer:600000});assert.equal(hbad.status,400);assert.equal(hbad.body.code,'bad_handoff_offer');
+ const hoff=await s.call('/settings',{handoffOffer:0});assert.equal(hoff.status,200);assert.deepEqual([hoff.body.handoffOffer,hoff.body.contextPolicy.handoff.at],[0,0]);
+ assert.equal((await s.call('/me')).body.features.handoffAt,0);
+ await sleep(100);assert.equal(changes(),before,'changing the offer restarts nothing');
+ await s.call('/settings',{handoffOffer:null});
  // Back to the default: null clears it from the file, and new processes get nothing again.
  const off=await s.call('/settings',{contextPolicy:null});assert.equal(off.status,200);assert.equal(off.body.contextPolicy.compaction.mode,'agent');
  assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir,'data','pocket-settings.json'),'utf8')).contextPolicy,null);
  await s.call('/new',{cwd:repo,text:'cleared',model:'claude-opus-5-5[1m]',clientMessageId:randomUUID()});
  assert.ok(await s.until(()=>s.lines('calls').some(c=>c.text==='cleared')));
  assert.equal(s.lines('calls').find(c=>c.text==='cleared').settingsEnv,null);
+ assert.equal(off.body.contextPolicy.handoff.at,200000,'with the agent’s own compaction the offer is back at 200K');
 });

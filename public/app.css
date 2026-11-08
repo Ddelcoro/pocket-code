@@ -170,6 +170,9 @@ html:not(.raw-steps) .ledgerwrap > summary { font-family: system-ui, -apple-syst
 .choice-rec .choice-tag { font-size: 12px; font-weight: 600; line-height: 1.3; letter-spacing: .01em; color: var(--on-accent); opacity: .9; }
 .choice-x { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 10px; color: var(--dim); }
 .choice-x:hover { color: var(--text); background: var(--raised); }
+.choice-handoff { display: inline-flex; align-items: center; gap: 6px; background: transparent; border-color: var(--line); color: var(--dim); }
+.choice-handoff svg.i { width: 15px; height: 15px; stroke-width: 1.7; flex: none; }
+.choice-handoff:hover { color: var(--text); background: var(--raised); }
 .choice:focus-visible, .choice-x:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
 
 .turn-err { color: var(--err); font-size: 14.5px; border: 1px solid var(--err); border-radius: 10px;
@@ -1885,6 +1888,16 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 /* 1.62: Try harder, under the latest reply in Assistant mode */
 #msgs > .try-harder { margin: 2px 0 8px; align-self: flex-start; }
 
+/* 1.102: the handoff offer, under the latest finished reply once a conversation is large. Operate: variance 2,
+   motion 2 (none), density 5. The lineage line's voice: --dim sentence, one chip, a quiet text button. No colour. */
+#msgs > .handoff-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 2px 0 8px; }
+.handoff-offer-text { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--dim); max-width: 60ch; }
+.handoff-offer-actions { display: flex; align-items: center; gap: 4px; }
+.handoff-offer .chip { min-height: 44px; display: inline-flex; align-items: center; }
+.handoff-offer-later { min-height: 44px; padding: 0 12px; border-radius: 10px; font-size: 13.5px; color: var(--dim); }
+.handoff-offer-later:hover { color: var(--text); background: var(--raised); }
+.handoff-offer-later:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+
 /* 1.67: Settings → Agents & instance → Automatic model choice and One sign-in. Operate refinement: variance 2, motion 1,
    density 5; existing tokens. One row per level: name and what it is for, then Model and Effort side by side (stacked on
    a phone), then what it runs now. */
@@ -2061,6 +2074,7 @@ html.assistant .assistant-home .recent-starts { display: none; } /* the home's o
 @media (min-width: 900px) { header.bar #sideb { display: none; } }
 /* 1.79: Branch, and the line under the header that ties a branch to its conversation */
 .conversation-branch[hidden] { display: none; }
+.conversation-handoff[hidden] { display: none; } /* 1.102 */
 .lineage { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 6px 16px; font-size: 13.5px; color: var(--dim); border-bottom: 1px solid var(--line); }
 .lineage[hidden] { display: none; }
 .lineage .i { width: 16px; height: 16px; flex: none; }

@@ -203,7 +203,7 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/voice/transcribe'){const chunks=[];for await(const c of req)chunks.push(c);voiceLog.transcribe.push({bytes:Buffer.concat(chunks).length,vocabulary:req.headers['x-vocabulary']||''});return json({text:uiModes.voiceText});}
  if(url.pathname==='/api/voice/speak'){let raw='';for await(const c of req)raw+=c;voiceLog.speak.push(JSON.parse(raw));res.writeHead(200,{'content-type':'audio/wav'});res.end(silentWav);return;}
  if(url.pathname.endsWith('/release')){let raw='';for await(const c of req)raw+=c;const stop=JSON.parse(raw||'{}').stop;return url.pathname.includes(rows[0].id)&&!stop?json({error:'Still running'},409):json({ok:true});}
- if(url.pathname==='/api/me')return json({ok:true,features:{coordination:Boolean(fixtureSettings.coordination)&&!fixtureSettings.assistantMode,projects:Boolean(fixtureSettings.projects),documents:Boolean(fixtureSettings.documents),tasks:Boolean(fixtureSettings.tasks),vault:Boolean(fixtureSettings.vault),inbox:Boolean(fixtureSettings.inbox),assistantMode:Boolean(fixtureSettings.assistantMode),assistantLocked:Boolean(fixtureSettings.assistantLocked)}});
+ if(url.pathname==='/api/me')return json({ok:true,features:{coordination:Boolean(fixtureSettings.coordination)&&!fixtureSettings.assistantMode,projects:Boolean(fixtureSettings.projects),documents:Boolean(fixtureSettings.documents),tasks:Boolean(fixtureSettings.tasks),vault:Boolean(fixtureSettings.vault),inbox:Boolean(fixtureSettings.inbox),assistantMode:Boolean(fixtureSettings.assistantMode),assistantLocked:Boolean(fixtureSettings.assistantLocked),handoffAt:fixtureSettings.handoffAt||0}});
  // 1.99: Coordination's two calls, on a list the test resets.
  if(url.pathname==='/api/coordination')return json({now:Date.now(),seeds:[],holds:coordFixture.holds,recent:coordFixture.recent});
  if(url.pathname==='/api/coordination/owner-release'){let raw='';for await(const c of req)raw+=c;const {name}=JSON.parse(raw),hold=coordFixture.holds.find(h=>h.name===name);coordFixture.holds=coordFixture.holds.filter(h=>h!==hold);
@@ -981,6 +981,8 @@ try{
  await runUIRegressions({browser,base,rows,out,setMode:patch=>Object.assign(uiModes,patch),getMode:()=>uiModes,settingsState:()=>fixtureSettings,vaultFixture,received,voiceLog,conversations,pinOrders});
  const {runSideChatRegressions}=await import('./sidechat-browser.mjs');
  await runSideChatRegressions({browser,base,rows,out,side:sideFixture,conversations});
+ const {runHandoffRegressions}=await import('./handoff-browser.mjs'); // 1.102
+ await runHandoffRegressions({browser,base,rows,out,settings:fixtureSettings,received,side:sideFixture,conversations});
  const {runSlashRegressions}=await import('./slash-browser.mjs');
  await runSlashRegressions({browser,base,rows,received,out});
  const {runCliUpdateRegressions}=await import('./cli-updates-browser.mjs');

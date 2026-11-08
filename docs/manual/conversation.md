@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.98.0
+checked: 1.102.0
 sources: choices.mjs, starts.mjs, results.mjs, queue.mjs, sidechat.mjs, public/sidechat.js, subagents.mjs, workspace.mjs, worktrees.mjs, public/secret-detect.js
 -->
 # Working in a conversation
@@ -347,13 +347,29 @@ A handoff starts a new conversation that knows only a briefing the agent wrote, 
 conversation has grown long or the next step is a separate job. Use [Branch](#branch-into-a-new-conversation) when the new
 conversation needs everything said so far: Branch keeps all of it, and each of its replies reads all of it again.
 
-1. Ask the agent to hand off, or pick `/handoff` from the `/` list. The agent writes the briefing.
+1. Choose **Handoff** in the chip row above the message box on a computer (an icon in the Working row while the agent
+   works), **Conversation options → Handoff** on any device, or `/handoff` from the `/` list. You can also ask in your own
+   words. The agent writes the briefing. If the agent is still working, the request waits in the queue and runs after
+   the current reply.
 2. The reply shows a card, **Continue in a new conversation**, with the title, folder, agent, permissions and the start of
    the briefing. Assistant mode shows the title and briefing only.
 3. Choose **Start** to begin at once, or **Review first** to read and change the briefing on New conversation.
 
 The new conversation opens with the briefing as its first message. It shows **Continued from …** under its header, and the
 original shows **Continued in …**.
+
+When a conversation grows past the size set in [Settings → Context and subagents](settings.md) (200K tokens unless you
+change it), a line appears under the latest finished reply: **This conversation is at 435K tokens, and every reply reads
+all of it.** with **Hand off** and **Not now**. Hand off asks for the briefing, the same as the button. The line shows
+only while nothing is running, waiting for you or typed in the message box, and not in a conversation that has already
+been continued in another. **Not now** hides it until the conversation reaches the next multiple of that size (400K, then 600K
+with the default), on this browser. The context ring turns amber at the same point. Pocket never hands off by itself.
+
+When the reply ends with [suggested replies](#pick-a-suggested-reply), the line is not shown. Instead the replies get one more
+button, **Hand off first**, so you decide once. Pick a reply to carry on here (that also counts as Not now). Choose
+**Hand off first** to start the handoff with your choice still open: the briefing lists the suggested replies as the
+first decision, so the new conversation offers them to you. The Handoff button does the same while suggested replies
+are showing.
 
 - A handoff starts once. If it has started, the card reads **Started** and links the conversation; Start on another device
   opens that conversation instead of making a second one.

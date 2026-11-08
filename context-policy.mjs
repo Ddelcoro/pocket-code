@@ -51,6 +51,21 @@ export function cleanPolicy(patch, current) {
   return { policy: next };
 }
 
+// 1.102: the handoff offer. Pocket suggests handing a conversation off once its context passes this size, at a break in
+// the work (the app decides the break). `handoffOffer` in pocket-settings.json is null (the default, 200K), 0 (off) or
+// one of HANDOFF_CHOICES. With Compact conversations on at or below that size the agent would compact first, so the
+// offer comes at three quarters of the compaction limit instead, rounded to 10K.
+export const HANDOFF_CHOICES = [150_000, 200_000, 300_000, 400_000];
+export const HANDOFF_DEFAULT = 200_000;
+export const isHandoffOffer = v => v === null || v === 0 || HANDOFF_CHOICES.includes(v);
+export function handoffOfferAt(offer, savedPolicy) {
+  const at = offer === null || offer === undefined || !isHandoffOffer(offer) ? HANDOFF_DEFAULT : offer;
+  if (!at) return 0;
+  const p = readPolicy(savedPolicy);
+  if (p.compaction.mode === 'limit' && p.compaction.limit <= at) return Math.max(LIMIT_MIN, Math.round(p.compaction.limit * 0.75 / 10_000) * 10_000);
+  return at;
+}
+
 export const isDefaultPolicy = p => { const r = readPolicy(p); return r.compaction.mode === 'agent' && r.workers.model === 'default' && !r.workers.effort; };
 
 // Claude: the worker one tier below the leader, as a CLI alias so it follows the newest version.

@@ -6,6 +6,9 @@
 // the panel and the Branch sheet) so they are never confused.
 const SIDE_WHAT = 'Ask a quick question about this conversation. Nothing is saved and nothing changes.';
 const BRANCH_WHAT = 'Start a new saved conversation that carries on from here and can do work. This one stays as it is.';
+// 1.102: the third way off a conversation. The agent writes the briefing; the card it leaves has Start.
+const HANDOFF_WHAT = 'Have the agent write a briefing and offer a fresh conversation that picks up from it. This one stays as it is.';
+const HANDOFF_ASK = 'Hand this off: write a briefing for a new conversation to pick up from here, and give me the handoff card.';
 const SideChat = (() => {
   const sides = new Map(); // conversation id -> its live side chat id
   let view = null;         // {parentId, sh, es, list, box, send, status, busy, total, model, ended, live}
@@ -137,6 +140,7 @@ const SideChat = (() => {
       br.setAttribute('aria-label', 'Branch: ' + BRANCH_WHAT); br.dataset.tip = 'Branch: ' + BRANCH_WHAT;
       br.onclick = () => Branch.open(chatId);
     }
+    Handoff.paintButton();
     if (!b) return;
     if (!show) { b.hidden = true; return; }
     b.hidden = false;
@@ -215,9 +219,102 @@ const Branch = (() => {
     if (s.continuedFrom) parts.push(`<span>Continued from ${link(s.continuedFrom)}</span>`); // 1.96: handoffs
     const next = s.continuedIn || [];
     if (next.length) parts.push(`<span>Continued in ${next.slice(0, 3).map(link).join(', ')}${next.length > 3 ? ' and ' + (next.length - 3) + ' more' : ''}</span>`);
+    Handoff.noteLineage(s);
     el.hidden = !parts.length;
     el.innerHTML = parts.length ? (s.branchOf || kids.length ? IC.branch : IC.hand) + parts.join('<span class="lineage-sep" aria-hidden="true">·</span>') : '';
   }
   return { open, paintLineage };
 })();
 
+/* 1.102: Handoff. A button beside Branch (Conversation options on a phone) that asks the agent for the handoff card, and
+   a one-line offer under the latest finished reply once the conversation passes the size set in Settings (200K tokens
+   by default, sooner when Compact conversations would compact first). The offer waits for a break in the work: nothing
+   running, nothing waiting on you, nothing typed. Not now hides it until the conversation has grown by that size again;
+   a conversation that was already handed off is not offered again. The request is an ordinary message, so it queues
+   behind a running reply rather than steering it, and it shows in the conversation like anything else you send. */
+const Handoff = (() => {
+  const continued = new Set(); // conversations already continued elsewhere (from the lineage)
+  const at = () => Number(window.pocketFeatures?.handoffAt) || 0;
+  const showing = id => { const e = document.getElementById(id); return Boolean(e && !e.hidden); };
+  function noteLineage(s) { if (!s?.id) return; if ((s.continuedIn || []).length) continued.add(s.id); else continued.delete(s.id); }
+  // Reply choices still open under the latest reply: a handoff carries them, so the new conversation asks you there.
+  // Typing /handoff hides them for a moment, so this reads the latest reply's set unless you dismissed it with ×.
+  const openSet = () => {
+    const msgs = document.getElementById('msgs'); if (!msgs) return null;
+    const last = [...msgs.children].filter(e => e.matches('.m-user, .m-asst:not(.live)')).pop();
+    const set = last?.matches('.m-asst') ? last.querySelector('[data-choices]') : null;
+    return set && set.dataset.choices !== readLocal('pc-choices-dismissed', {})[chatId] ? set : null;
+  };
+  const optionsOf = set => set ? [...set.querySelectorAll('.choice:not(.choice-handoff)')].map(b => b.dataset.choice + (b.matches('.choice-rec') ? ' (Recommended)' : '')) : [];
+  const askWith = options => options.length ? HANDOFF_ASK + ' I have not picked one of these options yet: ' + options.map(o => '"' + o + '"').join('; ') + '. Put them in the briefing as the first decision, so the new conversation starts by offering them.' : HANDOFF_ASK;
+  function send(id = chatId) {
+    if (!id || id !== chatId) return;
+    const box = document.getElementById('box');
+    if (loadOutbox(id) || sendsInFlight.has(id)) return toast('Wait for your last message to send, then hand off.');
+    if (box?.value.trim() || tb?.attachments?.length) return toast('Send or clear what you are writing first, then hand off.');
+    dismiss(id);
+    const set = openSet(), ask = askWith(optionsOf(set)); if (set) set.hidden = true;
+    const mode = sendModes.get(id), working = composerWorking;
+    if (working) sendModes.set(id, 'queue'); // after the reply: a briefing written mid-step would miss the end of it
+    const sent = sendMsg(ask);         // sendMsg reads the mode before its first await
+    if (working) { if (mode) sendModes.set(id, mode); else sendModes.delete(id); }
+    if (working) toast('Handoff asked for. It runs after the current reply.');
+    return sent;
+  }
+  function paintButton() {
+    const b = document.getElementById('handoff-open'); if (!b) return;
+    b.hidden = !(chatId && isWide()); // phones: Conversation options
+    b.innerHTML = b.classList.contains('icon') ? IC.hand : IC.hand + '<span>Handoff</span>';
+    b.setAttribute('aria-label', 'Handoff: ' + HANDOFF_WHAT); b.dataset.tip = 'Handoff: ' + HANDOFF_WHAT;
+    b.onclick = () => send(chatId);
+  }
+  // The step this size is in: 1 past the offer size, 2 past twice it, and so on. Not now records the step.
+  const step = (used, size) => Math.floor(used / size);
+  function dismiss(id) {
+    const ctx = ctxCache.get(id), size = at(); if (!ctx?.used || !size) return;
+    const m = readLocal('pc-handoff-dismissed', {});
+    delete m[id]; m[id] = step(ctx.used, size);                        // newest last, so pruning drops the oldest
+    const keys = Object.keys(m); keys.slice(0, Math.max(0, keys.length - 100)).forEach(k => delete m[k]);
+    writeLocal('pc-handoff-dismissed', m);
+  }
+  function eligible(id, msgs) {
+    const size = at(), ctx = ctxCache.get(id);
+    if (!size || !id || !ctx?.used || ctx.used < size || continued.has(id)) return null;
+    if ((readLocal('pc-handoff-dismissed', {})[id] || 0) >= step(ctx.used, size)) return null;
+    if (composerWorking || sendsInFlight.has(id) || loadOutbox(id)) return null;
+    const box = document.getElementById('box'); if (box?.value.trim() || box?.readOnly) return null;
+    if (showing('approvals-open') || showing('questions-open')) return null;
+    const row = allSessions.find(r => r.id === id);
+    if (row && ['running', 'background', 'observed', 'waiting', 'input'].includes(rowState(row).kind)) return null;
+    const last = [...msgs.children].filter(e => e.matches('.m-user, .m-asst:not(.live)')).pop();
+    if (!last?.matches('.m-asst') || !last.textContent.trim() || last.querySelector('.handoff-card')) return null;
+    return { last, used: ctx.used };
+  }
+  function paintHint(msgs = document.getElementById('msgs')) {
+    if (!msgs) return;
+    const had = msgs.querySelector('.handoff-offer, .choice-handoff');
+    msgs.querySelectorAll('.handoff-offer, .choice-handoff').forEach(e => e.remove());
+    const hit = eligible(chatId, msgs); if (!hit) return;
+    // Reply choices showing: one more button among them, so you decide once. Picking a choice answers it too.
+    const set = hit.last.querySelector('[data-choices]:not([hidden]) .choice-opts');
+    if (set) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'choice choice-handoff';
+      b.innerHTML = IC.hand + '<span>Hand off first</span>';
+      b.title = 'This conversation is at ' + fmtTokens(hit.used).replace(/k$/, 'K') + ' tokens. Start a fresh one that offers these choices.';
+      b.setAttribute('aria-label', 'Hand off first: start a fresh conversation that offers these choices. This one is at ' + fmtTokens(hit.used).replace(/k$/, 'K') + ' tokens.');
+      b.onclick = () => send(chatId);
+      set.append(b);
+      return;
+    }
+    const el = document.createElement('div'); el.className = 'handoff-offer'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Handoff suggestion');
+    el.innerHTML = `<p class="handoff-offer-text">This conversation is at ${esc(fmtTokens(hit.used).replace(/k$/, 'K'))} tokens, and every reply reads all of it.</p>
+      <div class="handoff-offer-actions"><button type="button" class="chip" data-handoff-offer>${IC.hand}<span>Hand off</span></button><button type="button" class="handoff-offer-later" data-handoff-later>Not now</button></div>`;
+    el.querySelector('[data-handoff-offer]').onclick = () => { el.remove(); send(chatId); };
+    el.querySelector('[data-handoff-later]').onclick = () => { dismiss(chatId); el.remove(); document.getElementById('box')?.focus(); };
+    const after = hit.last.nextElementSibling?.matches('.try-harder') ? hit.last.nextElementSibling : hit.last;
+    after.after(el); // beside the reply, not in it, so copying or reading the reply aloud never includes it
+    if (!had) scrollBottom();
+  }
+  matchMedia('(min-width: 900px)').addEventListener('change', () => paintButton());
+  return { send, dismiss, paintButton, paintHint, noteLineage, past: id => { const c = ctxCache.get(id), size = at(); return Boolean(size && c?.used >= size); } };
+})();

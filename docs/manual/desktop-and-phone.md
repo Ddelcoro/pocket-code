@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.96.0
+checked: 1.102.0
 sources: public/split.js, public/workspace.js, public/tips.js, public/sidechat.js, docs/session-focus.md
 -->
 # Desktop and phone
@@ -156,7 +156,7 @@ These work at every width and are saved on this browser:
   (`POCKET_FRAME_ANCESTORS`), the page around it is told so it can fold its own header too.
 - **The sliders button beside the message box** (**Hide message settings** / **Show message
   settings**). It hides the chip row: model, effort, permissions, Codex mode, **Alerts**, voice,
-  **Side chat**, **Branch**, the project chip and **Add task**. The paperclip, the context ring and Send
+  **Side chat**, **Branch**, **Handoff**, the project chip and **Add task**. The paperclip, the context ring and Send
   stay, and so do attachments, upload problems, Stop, the steering choice and agent requests.
 - **Filters** on the rail and on the conversation list fold the filters behind a summary line.
 - **Settings → Conversation → Collapse steps** folds each run of agent steps behind a one-line summary.

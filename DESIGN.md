@@ -8,6 +8,21 @@ terminal green-on-black. Chat reads like a document. The machine's activity (too
 visibly *machinery*: small monospace ledger lines, dim, truthful. One living element: the
 clay ember that breathes while Claude works.
 
+## Handoff offer (1.102)
+
+Pinned Operate refinement (design-studio → impeccable): variance 2, motion 2, density 5; existing tokens, components and
+the existing hand icon, no new colour. Read: someone deep in a long conversation should be able to move to a fresh one
+in one tap, and be told once, quietly, when the size starts to cost them, without Pocket ever acting on its own.
+**Handoff** is a toolbar chip beside Branch on a computer (`IC.hand`, icon-only when the row is narrow), an icon in the
+Working row while a reply runs, and a choice under Branch in Conversation options. The offer is one line of `--dim`
+13.5px text (max 60ch) under the latest finished reply, after Try harder when that shows, with the existing `.chip`
+**Hand off** and a quiet text button **Not now**; both are 44px targets and wrap under the text on a phone. No card,
+no border, no animation: it is a sentence, not a banner. It hides while anything is running, waiting for an answer or
+typed, so it never competes with live work. Past the same threshold the context ring takes the existing amber level.
+When the reply ends with suggested replies, the line gives way to one more button at the end of them, **Hand off first**:
+the `.choice` shape in a quiet outline (`--line` border, `--dim` text, no fill, the hand icon), so it reads as a way
+out rather than another answer, and the recommended reply stays the one filled button.
+
 ## A pin on every conversation row (1.94, Damon)
 
 Pinned Operate refinement (design-studio → impeccable): variance 2, motion 2, density 8; existing tokens and the

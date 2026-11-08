@@ -326,7 +326,7 @@ function renderToolbar() {
     ${tb.provider === 'acp' && !acpEffortLevels().length ? '' : `<button class="chip ${tb.prefs.effort !== 'default' ? 'set' : ''}" id="c-eff">${IC.gauge}${esc(tbLabel(effortList(), tb.prefs.effort))}</button>`}
     <button class="chip" id="c-approval" title="Permissions for the next reply" aria-label="Permissions for the next reply: ${permissionLabel(nextApprovalMode())}"><span class="label-full">${permissionLabel(nextApprovalMode())}</span><span class="label-short" aria-hidden="true">${nextApprovalMode() === 'full' ? 'Full' : 'Review'}</span></button>
     ${engineHas(tb.provider,'planMode')?`<button class="chip ${tb.prefs.executionMode==='plan'?'set':''}" id="c-mode">${tb.prefs.executionMode==='plan'?'Plan first':'Work normally'}</button>`:''}
-    ${tb.allowMute ? `<button class="chip ${chatMuted ? 'set' : ''}" id="c-mute" aria-label="Toggle notifications for this conversation">${chatMuted ? IC.bellOff : IC.bell}${chatMuted ? 'Muted' : 'Alerts'}</button>` : ''}${Voice.muteButtonHTML('chip')}${tb.allowMute ? '<button class="chip conversation-side" id="side-open" hidden>Side chat</button><button class="chip conversation-branch" id="branch-open" hidden>Branch</button><button class="chip conversation-project" id="project-open" hidden>Project</button><button class="chip conversation-task" id="task-open" hidden>Add task</button>' : ''}`;
+    ${tb.allowMute ? `<button class="chip ${chatMuted ? 'set' : ''}" id="c-mute" aria-label="Toggle notifications for this conversation">${chatMuted ? IC.bellOff : IC.bell}${chatMuted ? 'Muted' : 'Alerts'}</button>` : ''}${Voice.muteButtonHTML('chip')}${tb.allowMute ? '<button class="chip conversation-side" id="side-open" hidden>Side chat</button><button class="chip conversation-branch" id="branch-open" hidden>Branch</button><button class="chip conversation-handoff" id="handoff-open" hidden>Handoff</button><button class="chip conversation-project" id="project-open" hidden>Project</button><button class="chip conversation-task" id="task-open" hidden>Add task</button>' : ''}`;
   const ar = $('#attrow');
   if (ar) {
     ar.innerHTML = tb.attachments.map((a, i) => `
@@ -346,7 +346,7 @@ function renderToolbar() {
   if (eff) eff.onclick = () => sheet('Reasoning effort', effortList(), tb.prefs.effort,
     v => { tb.prefs.effort = v; setPrefs(tb.key, tb.prefs); renderToolbar(); });
   if (loadOutbox(tb.key)) {
-    bar.querySelectorAll('button:not(#c-mute):not([data-voice-mute]):not(#project-open):not(#task-open):not(#side-open):not(#branch-open)').forEach(b => { b.disabled = true; });
+    bar.querySelectorAll('button:not(#c-mute):not([data-voice-mute]):not(#project-open):not(#task-open):not(#side-open):not(#branch-open):not(#handoff-open)').forEach(b => { b.disabled = true; });
     if(att)att.disabled=true;
     ar?.querySelectorAll('button').forEach(b => { b.disabled = true; });
   }
@@ -380,6 +380,7 @@ function sessionSheet(s, refresh) { // s: {id, title, pinned}
       s.id===chatId?'<button class="opt" id="so-find">'+IC.search+'<span>Find in conversation</span></button><button class="opt" id="so-changes">'+IC.diff+'<span>Changed files</span></button>':'',
       !PANE && chatId && s.id !== chatId && isWide() ? '<button class="opt" id="so-beside">'+IC.columns+'<span>Open beside<span class="sub">Show it next to the current conversation</span></span></button>' : '',
       s.id===chatId&&SideChat.available(s.id)?'<button class="opt" id="so-side">'+IC.chat+'<span>Side chat<span class="sub">'+SIDE_WHAT+'</span></span></button><button class="opt" id="so-branch">'+IC.branch+'<span>Branch<span class="sub">'+BRANCH_WHAT+'</span></span></button>':'',
+      s.id===chatId?'<button class="opt" id="so-handoff">'+IC.hand+'<span>Handoff<span class="sub">'+HANDOFF_WHAT+'</span></span></button>':'',
       `<button class="opt" id="so-agents">${IC.columns}<span>Subagents<span class="sub">What each one is doing, and work in the background</span></span></button>`,
       s.id===chatId?'<button class="opt" id="so-usage">'+IC.gauge+'<span>Plan usage<span class="sub">5-hour and weekly limits, extra-usage status</span></span></button>':''])}
     ${optGroup('Organize', [
@@ -412,6 +413,7 @@ function sessionSheet(s, refresh) { // s: {id, title, pinned}
   sh.querySelector('#so-agents').onclick=()=>openAgentsPanel(s.id);
   sh.querySelector('#so-side')?.addEventListener('click',()=>{close();SideChat.open(s.id);});
   sh.querySelector('#so-branch')?.addEventListener('click',()=>{close();Branch.open(s.id);});
+  sh.querySelector('#so-handoff')?.addEventListener('click',()=>{close();Handoff.send(s.id);});
   sh.querySelector('#so-permissions').onclick=()=>{close();chooseApprovalMode(s.id);};
   sh.querySelector('#so-usage')?.addEventListener('click',openUsagePanel);
   sh.querySelector('#so-version')?.addEventListener('click',()=>settingsSheet({about:true}));
@@ -754,6 +756,7 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
       <p class="vault-set-head" id="s-context-h">Context and subagents</p>
       <p class="title-note" id="s-context-lead">Each reply reads the whole conversation again, so long conversations use the most of your plan. Compacting summarizes the older part. Subagents can run on a cheaper model than the conversation.</p>
       <label class="voice-field">Compact conversations<select id="s-context-limit" disabled><option value="agent">When the agent decides</option></select></label>
+      <label class="voice-field">Offer a handoff<select id="s-context-handoff" disabled><option value="200000">After 200K tokens</option></select></label>
       <label class="voice-field">Subagent model<select id="s-context-workers" disabled><option value="default">The agent’s own choice</option><option value="tier-down">One tier below the conversation’s model</option></select></label>
       <label class="voice-field">Subagent effort<select id="s-context-effort" disabled><option value="">The agent’s own choice</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
       <p class="title-note" id="s-context-note" role="status">Loading the context setting…</p></div>
@@ -1010,22 +1013,33 @@ async function settingsSheet({about = false, category = '', scrollTop = 0} = {})
     lim.innerHTML = '<option value="agent">When the agent decides</option>' + limits.map(n => `<option value="${n}">Before ${k(n)} tokens</option>`).join('');
     lim.value = cp.compaction.mode === 'limit' ? String(cp.compaction.limit) : 'agent';
     wk.value = cp.workers.model; ef.value = cp.workers.effort || '';
+    const ho = sh.querySelector('#s-context-handoff'), hf = cp.handoff; // 1.102
+    if (ho && hf) {
+      ho.innerHTML = '<option value="0">Off</option>' + (hf.choices || []).map(n => `<option value="${n}">After ${k(n)} tokens</option>`).join('');
+      ho.value = String(hf.offer ?? 200000); ho.disabled = false;
+    }
     lim.disabled = wk.disabled = ef.disabled = false;
     const on = (cp.engines || []).filter(e => e.applies).map(e => e.id === 'claude' ? 'Claude Code' : e.label), off = (cp.engines || []).filter(e => !e.applies).map(e => e.label);
     note.textContent = [
       on.length ? `Applies to ${on.join(' and ')} conversations from their next reply.` : '',
       off.length ? `${off.join(' and ')} conversations keep their own behavior for now.` : '',
       cp.compaction.mode === 'limit' ? `The agent compacts shortly before ${k(cp.compaction.limit)} tokens.` : '',
+      hf ? (!hf.at ? 'Pocket does not offer a handoff. The Handoff button is still beside Branch.' : hf.at !== (hf.offer ?? 200000) ? `Pocket offers a handoff at ${k(hf.at)} tokens, before the agent would compact.` : `Pocket offers a handoff under the latest reply once a conversation passes ${k(hf.at)} tokens and nothing is running.`) : '',
       cp.workers.model === 'tier-down' ? 'Fable conversations run Opus subagents, Opus runs Sonnet and GPT Astra runs GPT Sol. Other models keep the agent’s choice, and a conversation can still name a model for one subagent.' : '',
     ].filter(Boolean).join(' ');
   };
-  const saveContext = async patch => {
-    const fields = ['#s-context-limit', '#s-context-workers', '#s-context-effort'].map(q => sh.querySelector(q));
+  const saveContext = async (patch, key = 'contextPolicy', saved = 'Saved. Conversations use it from their next reply') => {
+    const fields = ['#s-context-limit', '#s-context-handoff', '#s-context-workers', '#s-context-effort'].map(q => sh.querySelector(q));
     fields.forEach(f => { f.disabled = true; });
-    try { srv = await api('/settings', { method: 'POST', body: JSON.stringify({ contextPolicy: patch }), signal: AbortSignal.timeout(8000) }); toast('Saved. Conversations use it from their next reply'); }
+    try {
+      srv = await api('/settings', { method: 'POST', body: JSON.stringify({ [key]: patch }), signal: AbortSignal.timeout(8000) }); toast(saved);
+      window.pocketFeatures = { ...(window.pocketFeatures || {}), handoffAt: srv.contextPolicy?.handoff?.at ?? 0 }; // 1.102: a compaction limit moves it too
+      paintCtxRing(); Handoff.paintHint();
+    }
     catch (err) { toast(err.message || 'Could not save the context setting'); }
     finally { if (sh.isConnected) { fields.forEach(f => { f.disabled = false; }); paintContext(); } }
   };
+  sh.querySelector('#s-context-handoff').onchange = e => saveContext(Number(e.target.value), 'handoffOffer', 'Saved'); // 1.102
   sh.querySelector('#s-context-limit').onchange = e => saveContext({ compaction: e.target.value === 'agent' ? { mode: 'agent' } : { mode: 'limit', limit: Number(e.target.value) } });
   sh.querySelector('#s-context-workers').onchange = e => saveContext({ workers: { model: e.target.value } });
   sh.querySelector('#s-context-effort').onchange = e => saveContext({ workers: { effort: e.target.value || null } });
@@ -2318,11 +2332,14 @@ function choicesHTML(options, rec) {
 function paintChoices() {
   const msgs = $('#msgs'); if (!msgs) return;
   paintTryHarder(msgs);
-  const sets = msgs.querySelectorAll('[data-choices]'); if (!sets.length) return;
-  const last = [...msgs.children].filter(e => e.matches('.m-user, .m-asst:not(.live)')).pop();
-  const box = $('#box'), dismissed = readLocal('pc-choices-dismissed', {})[chatId];
-  const open = !composerWorking && !sendsInFlight.has(chatId) && !loadOutbox(chatId) && !box?.value.trim() && !box?.readOnly;
-  sets.forEach(c => { c.hidden = !(open && c.closest('.m-asst') === last && c.dataset.choices !== dismissed); });
+  const sets = msgs.querySelectorAll('[data-choices]');
+  if (sets.length) {
+    const last = [...msgs.children].filter(e => e.matches('.m-user, .m-asst:not(.live)')).pop();
+    const box = $('#box'), dismissed = readLocal('pc-choices-dismissed', {})[chatId];
+    const open = !composerWorking && !sendsInFlight.has(chatId) && !loadOutbox(chatId) && !box?.value.trim() && !box?.readOnly;
+    sets.forEach(c => { c.hidden = !(open && c.closest('.m-asst') === last && c.dataset.choices !== dismissed); });
+  }
+  if (typeof Handoff !== 'undefined') Handoff.paintHint(msgs); // 1.102: after the choices, which it joins when they show
 }
 // 1.62: Assistant mode's only model control, phrased as an outcome. Under the latest finished Claude reply, it asks
 // for another, more careful pass on the strongest model this Pocket offers at high effort (capped by the policy);
@@ -2354,8 +2371,12 @@ document.addEventListener('click', e => {
     writeLocal('pc-choices-dismissed', m); set.hidden = true; $('#box')?.focus();
     return;
   }
-  const b = e.target.closest?.('.choice');
-  if (b && chatId) { b.closest('[data-choices]').hidden = true; sendMsg(b.dataset.choice); }
+  const b = e.target.closest?.('.choice:not(.choice-handoff)'); // Hand off first runs its own handler
+  if (b && chatId) {
+    const set = b.closest('[data-choices]');
+    if (set.querySelector('.choice-handoff')) Handoff.dismiss(chatId); // you chose to stay: no offer again at this size
+    set.hidden = true; sendMsg(b.dataset.choice);
+  }
 });
 function ledgerHTML(name, detail) {
   const say = window.PocketPhrase ? PocketPhrase.step(name, detail) : '';
@@ -3152,9 +3173,10 @@ function paintRingContext(el) {
   }
   const pct = Math.max(0, Math.min(1, ctx.pct || 0));
   fill.setAttribute('stroke-dasharray', `${Math.max(pct * 100, ctx.used > 0 ? 2 : 0).toFixed(1)} 100`);
-  el.dataset.level = pct >= 0.9 ? 'red' : pct >= 0.7 ? 'amber' : '';
+  const big = typeof Handoff !== 'undefined' && Handoff.past(chatId); // 1.102: past the handoff size on a large window
+  el.dataset.level = pct >= 0.9 ? 'red' : pct >= 0.7 || big ? 'amber' : '';
   const model = modelLabel(ctx.model);
-  el.dataset.tip = `${model ? model + ' · ' : ''}${ctxLine(ctx)}`;
+  el.dataset.tip = `${model ? model + ' · ' : ''}${ctxLine(ctx)}${big ? '. Large enough to hand off' : ''}`;
   el.setAttribute('aria-label', `Context window${model ? ' for ' + model : ''}: ${ctxLine(ctx)}. Open usage`);
 }
 async function paintContextMeter(id) {
@@ -3163,7 +3185,7 @@ async function paintContextMeter(id) {
   if (ctx) ctxCache.set(id, ctx); else ctxCache.delete(id);
   if (cache) cacheData.set(id, cache); else cacheData.delete(id);
   if (Number.isFinite(serverNow)) serverSkew = serverNow - Date.now();
-  if (chatId === id) paintCtxRing();
+  if (chatId === id) { paintCtxRing(); if (typeof Handoff !== 'undefined') Handoff.paintHint(); } // 1.102: the size is known now
 }
 
 /* ---------- prompt-cache warmth (1.28) ---------- */
@@ -3308,7 +3330,7 @@ function scrollBottom(force) {
 const SLASH_POCKET = [
   { name: 'btw', desc: 'Ask in a side chat, without adding to this conversation', where: 'chat', working: true, insert: true, ok: () => SideChat.available(chatId) },
   { name: 'branch', desc: 'Start a saved conversation that carries on from here', where: 'chat', working: true, ok: () => Boolean(chatId) && engineHas(providerOf(chatId), 'branch'), act: () => Branch.open(chatId) },
-  { name: 'handoff', desc: 'Have the agent write a briefing and offer a fresh conversation', where: 'chat', ok: () => Boolean(chatId), act: () => sendMsg('Hand this off: write a briefing for a new conversation to pick up from here, and give me the handoff card.') },
+  { name: 'handoff', desc: 'Have the agent write a briefing and offer a fresh conversation', where: 'chat', ok: () => Boolean(chatId), act: () => Handoff.send(chatId) },
   { name: 'new', desc: 'Start a new conversation in this folder', where: 'chat', working: true, act: () => { writeLocal('pc-new-start', { cwd: slashCwd }); localStorage.setItem('pc-provider', ['codex', 'acp'].includes(tb?.provider) ? tb.provider : 'claude'); location.hash = '#/new'; } },
   { name: 'model', desc: 'Choose the model for the next reply', where: 'both', ok: () => $('#c-model'), act: () => $('#c-model')?.click() },
   { name: 'effort', desc: 'Choose how much it thinks before answering', where: 'both', ok: () => $('#c-eff'), act: () => $('#c-eff')?.click() },
@@ -3441,7 +3463,7 @@ function setComposer(working) {
   c.innerHTML = `
     ${working ? `
       <div class="workrow"><span class="ember"></span><span id="work-label">Working</span>
-        ${ctxRingHTML()}<button class="icon wbell ${chatMuted ? 'on' : ''}" id="muteb" aria-label="Toggle notifications for this conversation">${chatMuted ? IC.bellOff : IC.bell}</button>${Voice.muteButtonHTML('icon')}<button class="icon wbell conversation-side" id="side-open" hidden></button><button class="icon wbell conversation-branch" id="branch-open" hidden></button><button class="icon wbell conversation-project" id="project-open" hidden></button><button class="icon wbell conversation-task" id="task-open" hidden></button>
+        ${ctxRingHTML()}<button class="icon wbell ${chatMuted ? 'on' : ''}" id="muteb" aria-label="Toggle notifications for this conversation">${chatMuted ? IC.bellOff : IC.bell}</button>${Voice.muteButtonHTML('icon')}<button class="icon wbell conversation-side" id="side-open" hidden></button><button class="icon wbell conversation-branch" id="branch-open" hidden></button><button class="icon wbell conversation-handoff" id="handoff-open" hidden></button><button class="icon wbell conversation-project" id="project-open" hidden></button><button class="icon wbell conversation-task" id="task-open" hidden></button>
         <button class="chip stopchip" id="stopb" aria-label="Stop">${IC.stop}Stop</button></div>`
       : `<div class="toolbar" id="tbar"></div><div class="attachrow" id="attrow"></div>`}
     <div class="composer-entry">
