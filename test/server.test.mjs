@@ -74,6 +74,11 @@ test('HTTP delivery, running state, completion and receipt recovery',async t=>{
  assert.equal((await call('/seen',{seen:{'not-a-session':1,[randomUUID()]:'soon'}})).body.changed,0,'bad ids and times are ignored');
  await call('/seen',{seen:{[id]:failedAt}});await stop();await start();
  assert.equal((await call('/sessions')).body.sessions.find(s=>s.id===id).seenAt,failedAt,'kept across restarts');
+ // 1.101: the reply to a wrap-up request (here Mark resolved) is listed as reviewed for every device, without a visit.
+ assert.equal((await call(`/session/${id}/message`,{text:'Mark resolved',clientMessageId:randomUUID()})).status,202);
+ await sleep(800);
+ const wrapped=(await call('/sessions')).body.sessions.find(s=>s.id===id);
+ assert.equal(wrapped.state.kind,'finished');assert.ok(wrapped.state.at>failedAt&&wrapped.seenAt>=wrapped.state.at,JSON.stringify(wrapped));
  // Pinned order is shared by every device, beats recency, survives restarts; unpinning forgets the place.
  const pid=(await call('/new',{cwd:repo,text:'Second pinned session',provider:'claude',clientMessageId:randomUUID()})).body.id;await sleep(400);
  for(const x of [id,pid])assert.equal((await call(`/session/${x}/pin`,{pinned:true})).body.pinned,true);

@@ -3,6 +3,16 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.101.0] — 2026-11-08 · build 194
+
+Reported by Brad (2026-11-08): tapping **Mark resolved**, a reminder or a similar closing reply under a finished reply started one more turn, and its one-line confirmation put the conversation back in Attention as Response ready. Closing the tab first did not help, and with the conversation still open it stayed New until a tap or scroll (the engagement rule added for voice mode).
+
+- **A wrap-up reply is reviewed as it finishes.** `recordOutcome` (every engine's turn end) sets the session's reviewed marker (`seen`) to the outcome time when the turn finished, was started by the owner (not autonomous, not a control turn), its request passes `wrapUpRequest` and its reply passes `replyAsksNothing`. The marker is the one `/api/seen` keeps, so every device's list agrees on the next poll and no client change is needed. The finished-reply push is skipped for it on Claude Code, Codex and OpenRouter.
+- **`wrapUpRequest(text)`** (`session-state.mjs`): at most 80 characters, no question mark or new line, and either wholly a closing phrase or one that leads with the step and says when or what. Closing phrases: mark/resolve/dismiss/close it or the alert, story, item, task (*Mark the alert resolved*, *Yes, resolve the alert*), not useful, no thanks, no reminder/task needed, skip it, that's all, all set, done, nothing else; a leading *ok*, *yes*, *just*, *no action*, *leave it* and a short reason after a comma (*Mark it resolved, Sam has it*) are allowed. Leading steps: *remind me to/on/at/<day>/<month>/<digit>…*, *set (me) a reminder*, *add/create a task/to-do/reminder to/for…*. A second step (*and*, *then*, *also*, *but*, *after*, *before*, *first*, *next*, *now*) makes it a real request, as do *Remind me what we decided* and *Add a task system to the app*. Checked against two weeks of the owner's own short replies: every closing one counts, and the misses are real requests (*Send it and remind me Monday*, *Commit the fix and resolve the alert*).
+- **`replyAsksNothing(msgs)`**: the turn's own assistant messages have text, no reply buttons, no `?` in the closing paragraph, and 1,500 characters or less in all. Any doubt keeps the conversation in Attention.
+- Manual: *Sessions* → the Attention bullet.
+- Tests: `session-state.test.mjs` (phrases that count and ones that only start like one; replies with a question, buttons or a report); `engine-parity.test.mjs` (Mark resolved is reviewed and an ordinary request after it is not, on all three engines); `server.test.mjs` (the list's `seenAt` covers the wrap-up reply).
+
 ## [1.100.0] — 2026-11-07 · build 193
 
 Requested by Damon and Brad (2026-11-07): the watcher fetched every thread but spam, trash and drafts, so mail Gmail filters archive or file away was judged too (on Damon's mailbox, 233 of 452 judged threads in a week never carried INBOX). Built by Damon on #226 and rebased here after 1.95.0 shipped.

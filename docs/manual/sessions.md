@@ -117,6 +117,13 @@ The conversation list is the home screen on a phone and the rail on a desktop. C
 - **Attention** collects questions, approvals, failed replies and finished replies you have not opened.
   In **Attention** and **New**, **Mark all reviewed** clears them on every device, with **Undo** for ten
   seconds.
+- A reply to a wrap-up request skips **Attention**. When the message you send is a short closing reply,
+  such as **Mark resolved**, **Mark the alert resolved**, **Dismiss**, **Remind me Nov 7 to recheck the numbers**, **Add a task to test
+  the fix**, **No thanks** or **That's all**, the agent's confirmation counts as read the moment it
+  finishes, on every device, and sends no notification, even if you closed the conversation first. It
+  still waits in **Attention** when the reply asks you something, ends with reply buttons or runs past
+  about 1,500 characters, and when your message says more than the closing step (*Mark resolved and fix the
+  test*).
 
 **All** groups the list by state: **Running**, **Working in background**, **Activity elsewhere**, **Needs
 attention**, **Waiting** and **Recent**, with pinned conversations first in each group. **Working in

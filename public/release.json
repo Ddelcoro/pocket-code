@@ -1,7 +1,8 @@
 {
- "version": "1.100.0",
- "assetV": 193,
+ "version": "1.101.0",
+ "assetV": 194,
  "notes": [
+  "Wrap-up replies no longer wait in Attention. When you tap Mark resolved, Remind me …, Add a task …, No thanks or a similar closing reply, the agent's short confirmation now counts as read the moment it finishes, on every device, and sends no notification, so you no longer have to open the conversation again or scroll to clear it, even after closing its tab. If the agent answers with a question, reply buttons or a long report, the conversation waits in Attention as before, and an ordinary request still does. Reported by Brad.",
   "What it reads: choose which mail Inbox Watch looks at. Settings → Inbox Watch now offers Everything (every thread but spam, trash and drafts, as before), Inbox only, and Inbox and these labels, with your Gmail labels to pick from. Everything is the default, so nothing changes until you choose. In the narrower choices your replies still count, so the watcher sees that you answered; a new email you start is not read. Requested by Damon and Brad.",
   "New Coordination view shows which conversation holds staging or a deploy, who is waiting, and what ended lately. Agents claim with pocket-coord, a clash names the holder, and the first waiter is woken on release. Holds are advice, not a lock. Off until you turn it on in Settings.",
   "The Git panel now lists every worktree of a repository as In use, Has work or Ready to remove, and says why. Remove only appears when nothing would be lost, names any ignored files and conversations affected, and keeps the branch. A conversation whose folder was removed carries on from your home folder and says so once.",

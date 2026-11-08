@@ -119,6 +119,27 @@ test('engine parity: the same checklist on Claude Code, Codex and OpenRouter', {
       await s.idle(id);
     });
 
+    // 1.101: tapping Mark resolved (or Remind me …) under a reply starts one more turn; its confirmation is reviewed as
+    // it ends, on every device, so it never lands in Attention. An ordinary request afterwards still does.
+    await t.test(`${engine}: the reply to a wrap-up request is already reviewed`, async () => {
+      const id = await s.start(engine, `parity wrap ${engine}`);
+      await s.idle(id);
+      // what every device's list reads: the reply's outcome time and the reviewed marker (the list itself leaves out /tmp folders)
+      const meta = () => { try { return JSON.parse(fs.readFileSync(path.join(s.dir, 'data', 'session-meta.json'), 'utf8'))[id] || {}; } catch { return {}; } };
+      const send = async text => {
+        const before = meta().outcome?.at || 0, r = await s.call(`/session/${s.e(id)}/message`, { text, approvalMode: 'full' });
+        assert.equal(r.status, 202, JSON.stringify(r.body));
+        return s.until(() => { const m = meta(); return m.outcome?.kind === 'finished' && m.outcome.at > before ? m : null; }, 15000, `${engine} to finish "${text}"`);
+      };
+      const first = await s.until(() => meta().outcome?.kind === 'finished' && meta(), 5000, 'the first outcome');
+      assert.ok(!(first.seen >= first.outcome.at), 'the first reply waits to be read');
+      const wrapped = await send('Mark resolved');
+      assert.ok(wrapped.seen >= wrapped.outcome.at, `${engine}: ${JSON.stringify(wrapped)}`);
+      const later = await send(`parity ordinary ${engine}`);
+      assert.ok(later.outcome.at > (later.seen || 0), 'an ordinary reply still waits to be read');
+      await s.idle(id);
+    });
+
     await t.test(`${engine}: a queued message runs on the same engine`, async () => {
       const id = await s.start(engine, `parity slow ${engine} __SLOW__`);
       await s.until(async () => (await s.session(id))?.active, 8000, 'the reply to start');

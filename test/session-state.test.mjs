@@ -41,3 +41,28 @@ test('a transcript written after the outcome keeps it only when nothing but book
   assert.equal(sessionState({turn:null,outcome:null,mtimeMs:99000,quietSince:true}).kind,'idle','no outcome, nothing to keep');
   assert.equal(sessionState({turn:{startedAt:5},outcome,quietSince:true}).kind,'running','a live turn still leads');
 });
+
+// 1.101: the reply to a wrap-up request (Mark resolved, Remind me …, No thanks) is reviewed as it finishes.
+import {wrapUpRequest, replyAsksNothing} from '../session-state.mjs';
+test('wrap-up requests are the short closing phrases, not requests that only start like one',()=>{
+  for(const s of ['Mark resolved','Mark it resolved.','Mark as done','Ok, mark it resolved','Mark resolved, thanks','Dismiss','Not useful',
+    'Remind me Nov 7 to recheck the numbers','Remind me to test it Monday','Add a task to test the fix','Add a task','Set a reminder for 3pm',
+    'No thanks','No, thanks','No reminder needed','That\'s all','Thanks, that\'s all','Done','All set',
+    // from the owner's own replies (two weeks of sessions, 2026-11-08)
+    'Mark the alert resolved','Mark the Inbox Watch alert resolved','Yes, resolve the alert','No action, mark the alert resolved',
+    'Leave it, just mark the alert resolved','Mark it resolved, Sam has it','No reminder, I\'ll start it myself','Close the task, Jo covered it',
+    'Remind me Mon Nov 9 at 10 AM to check their replies','please set me a reminder for working on this tomorrow at 9 a.m.'])assert.equal(wrapUpRequest(s),true,s);
+  for(const s of ['','Remind me what we decided','Add a task system to the app','Mark resolved and also fix the bug in server.mjs','Done?','Mark resolved?',
+    'Done with the deploy, now run tests','Dismiss the old PR and open a new one','Merge and deploy','No, use the other approach',
+    'Remind me tomorrow and then deploy it now','Commit the fix and resolve the alert','Send it and remind me Monday to close #226',
+    'Confirm it\'s the portal notice, then resolve','Mark it resolved, then deploy','Mark 1 done; approve 2, 3, 5, 6, 8','Close the PR','Mark resolved\n\n[Attached file: notes.txt]','Remind me to '+'x'.repeat(80),null,undefined])assert.equal(wrapUpRequest(s),false,String(s));
+});
+test('a wrap-up reply counts as read only when it asks nothing back',()=>{
+  const m=(...blocks)=>({blocks});
+  assert.equal(replyAsksNothing([m({t:'tool',name:'Bash'}),m({t:'text',text:'Marked resolved. The reminder is set for Nov 7.'})]),true);
+  assert.equal(replyAsksNothing([m({t:'text',text:'Which day should the reminder be?'})]),false,'a question');
+  assert.equal(replyAsksNothing([m({t:'text',text:'Done.\n\nShould I also close the PR?'})]),false,'a question in the closing paragraph');
+  assert.equal(replyAsksNothing([m({t:'text',text:'Set.'},{t:'choices',options:['Yes','No']})]),false,'reply buttons');
+  assert.equal(replyAsksNothing([m({t:'text',text:'x'.repeat(1600)})]),false,'a report');
+  assert.equal(replyAsksNothing([]),false,'no reply at all');
+});
