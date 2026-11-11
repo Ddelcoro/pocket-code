@@ -292,7 +292,15 @@ export class InboxStore {
     this.prune(now);
     const keep = e => (state === 'new' ? e.state === 'new' : state === 'dismissed' ? e.state === 'dismissed' : e.state !== 'dismissed') && (from == null || ms(e.at) >= from);
     const entries = this.entries.map((e, i) => [e, i]).filter(([e]) => keep(e)).sort(([a, i], [b, j]) => ms(b.at) - ms(a.at) || j - i).map(([e]) => this.view(e));
-    return { version: 1, now, entries, newCount: this.entries.filter(e => e.state === 'new').length, lastReportAt: this.lastReportAt(), sources: structuredClone(this.sources), paused: this.paused() };
+    return { version: 1, now, entries, newCount: this.entries.filter(e => e.state === 'new').length, lastReportAt: this.lastReportAt(), sources: structuredClone(this.sources), paused: this.paused(), gmailLabel: this.gmailLabel() };
+  }
+  // 1.103: the Gmail label, when it is on and the watcher can change it ({name}), else null. Dismiss and the row's X say
+  // the label comes off in Gmail only when it will.
+  gmailLabel() {
+    const key = this.watchSource(), p = this.profiles[key]?.profile, opt = p?.options?.gmailLabel;
+    if (!opt || typeof opt !== 'object' || opt.available === false) return null;
+    const on = this.watch[key]?.settings?.gmailLabel?.enabled ?? p?.defaults?.gmailLabel?.enabled;
+    return on === true ? { name: typeof opt.name === 'string' && opt.name.trim() ? opt.name.trim().slice(0, 60) : 'Pocket Inbox' } : null;
   }
 
   // open marks it seen and unread takes that back; dismiss / resolve / not_useful record the owner's decision for the worker;

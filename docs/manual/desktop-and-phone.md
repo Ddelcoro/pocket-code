@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.102.0
+checked: 1.103.0
 sources: public/split.js, public/workspace.js, public/tips.js, public/sidechat.js, docs/session-focus.md
 -->
 # Desktop and phone
@@ -61,7 +61,8 @@ A mark before the title shows the conversation's state, matching its rail row:
 | Snowflake | A large prompt cache has expired; the next reply writes it again |
 
 Hover a tab to read its state. Alt [ and Alt ] move to the previous and next tab. The X on a tab closes
-the tab only; the conversation and any running work continue.
+the tab only; the conversation and any running work continue. Closing the tab you are on opens a new conversation, as the
+plus does, rather than another tab, so a conversation waiting in Attention stays there until you choose to open it.
 
 ### Split view
 

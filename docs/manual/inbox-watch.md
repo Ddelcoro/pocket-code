@@ -1,5 +1,5 @@
 <!-- manual
-checked: 1.95.0
+checked: 1.103.0
 sources: inbox.mjs, inbox-runner.mjs, public/inbox.js, scripts/pocket-inbox.mjs, skills/pocket-inbox/SKILL.md, inbox-watch/
 -->
 # Inbox Watch
@@ -180,7 +180,7 @@ text alone.
 |---|---|---|
 | **Resolved** | moves to Done | Closes the story: it stops following it and no longer treats it as open |
 | **Not useful** | moves to Done | Learns from it (see [Learning from your choices](#learning-from-your-choices)): a rule under *Learned from your choices* saying what kind of mail is a digest line at most, with your note taken into account, and lowers the story to low priority |
-| **Dismiss** | moves to Done | Nothing; the story is unchanged |
+| **Dismiss** (the X on a row, or in the entry's sheet) | moves to Done | Takes the Gmail label off (below); the story is unchanged and the watcher learns nothing |
 | **Restore** | back to Open | Reopens a story that Resolved had closed |
 | **Add to Inbox** (a digest item) | the card says *Adding to Inbox*, then *Added to Inbox* | Sends that story as an alert now, lifts a low story to normal and learns a rule to alert on that kind of mail |
 | **Add to Inbox** (a look-ahead item) | the same | Sends it as an alert now and lifts a low story to normal; no rule |
@@ -188,7 +188,8 @@ text alone.
 | **Dismiss** (a digest or look-ahead item) | the card says *Dismissed* | Nothing; the story is unchanged |
 
 With the Gmail label on, finishing an entry in any of the three ways also takes the label off its thread and archives
-it (see [Your list in Gmail](#your-list-in-gmail)).
+it (see [Your list in Gmail](#your-list-in-gmail)). The X on a row is the same Dismiss as the sheet's; with the label on, its
+tip and the confirmation say the label comes off in Gmail at the next check.
 
 Pocket records each decision with the entry; the watcher asks for the ones it has not applied
 (`pocket-inbox feedback`), applies them and acknowledges them (`pocket-inbox ack`), so none is applied twice.

@@ -470,3 +470,16 @@ test('InboxStore: digest items are checked on add, kept on reload, decided one a
   const s2=new InboxStore(file,{now:()=>clock});const e2=s2.get(d.id);
   assert.deepEqual(e2.items.map(i=>[i.ref,i.state]),[['a296','not_useful'],['t12','open'],['a317','open']],'a317 shares its Gmail thread with the alert added above, so it folded into that alert and went last');
 });
+
+test('1.103: the list says whether Dismiss takes the Gmail label off, and its name', () => {
+  const dir=tmp(),file=path.join(dir,'inbox.json');let clock=Date.parse('2026-11-11T12:00:00Z');
+  const s=new InboxStore(file,{now:()=>clock});
+  assert.equal(s.snapshot().gmailLabel,null,'no watcher yet');
+  const base={version:1,defaults:{gmailLabel:{enabled:true}},options:{gmailLabel:{available:true,name:'Pocket Inbox',reason:null}}};
+  s.seen('inbox-monitor',undefined,base);assert.deepEqual(s.snapshot().gmailLabel,{name:'Pocket Inbox'},'on by the watcher\'s default');
+  s.setWatch('inbox-monitor',{gmailLabel:{enabled:false}});assert.equal(s.snapshot().gmailLabel,null,'the owner turned it off');
+  s.setWatch('inbox-monitor',{gmailLabel:{enabled:true}});assert.deepEqual(s.snapshot().gmailLabel,{name:'Pocket Inbox'});
+  clock+=1000;s.seen('inbox-monitor',undefined,{...base,options:{gmailLabel:{available:false,name:'Pocket Inbox',reason:'read only'}}});
+  assert.equal(s.snapshot().gmailLabel,null,'a watcher that can only read changes nothing in Gmail');
+  clock+=1000;s.seen('inbox-monitor',undefined,{version:1,defaults:{},options:{}});assert.equal(s.snapshot().gmailLabel,null,'a watcher without the label');
+});

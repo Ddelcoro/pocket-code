@@ -2226,13 +2226,13 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
    c=await card();assert.equal(c.title,'Purchasing review');assert.deepEqual(c.sessions,[rows[4].title]);
    await openChat(rows[4].id);await page.waitForFunction(()=>document.querySelector('#project-open')?.textContent==='Purchasing review');
    await clickControl(page,'#project-open');await page.waitForFunction(()=>location.hash==='#/projects/purchasing-review');await page.waitForSelector('.project-card');assert.match(c.tag,new RegExp(rows[4].cwd.replace(/[/]/g,'\\/')+'$'));
-   // Tabs: project tabs sit beside sessions; closing the current one moves to its neighbour; Alt ] cycles through them.
+   // Tabs: project tabs sit beside sessions; closing the current one opens New, never a neighbour (1.103); Alt ] cycles through them.
    let tabs=await page.$$eval('#open-sessions .open-session a',els=>els.map(e=>e.textContent));
    assert.ok(tabs.includes('Projects')&&tabs.includes('Warehouse stock report')&&tabs.includes('Purchasing review'),'project tabs: '+tabs.join(' | '));
    await page.keyboard.down('Alt');await page.keyboard.press(']');await page.keyboard.up('Alt');await sleep(300);
    assert.notEqual(await page.evaluate(()=>location.hash),'#/projects/purchasing-review','Alt ] moved to another tab');
    await page.goto(base+'/#/projects/purchasing-review');await page.waitForSelector('.project-card');
-   await clickControl(page,'[data-close-session="projects/purchasing-review"]');await page.waitForFunction(()=>location.hash!=='#/projects/purchasing-review'&&!document.querySelector('[data-close-session="projects/purchasing-review"]'));
+   await clickControl(page,'[data-close-session="projects/purchasing-review"]');await page.waitForFunction(()=>location.hash==='#/new'&&!document.querySelector('[data-close-session="projects/purchasing-review"]'));
    tabs=await page.$$eval('#open-sessions .open-session a',els=>els.map(e=>e.textContent));assert.ok(!tabs.includes('Purchasing review'));
    // Split: a project view beside a conversation; the pane is a full Pocket instance on that route.
    await openChat(rows[4].id);await clickControl(page,'#splitb');await page.waitForSelector('.sheet [data-v="projects/scheduled"]');
@@ -2761,10 +2761,13 @@ export async function runUIRegressions({browser,base,rows,out,setMode,getMode=()
     await clickRow('[data-inbox-more][aria-label="Options for Oakridge dispatch conflict"]');await page.waitForSelector('.inbox-sheet');await page.waitForFunction(()=>[...document.querySelectorAll('.inbox-sheet')].every(e=>e.getAnimations({subtree:true}).every(a=>a.playState==='finished')));
     assert.match(await page.$eval('.inbox-sheet .inbox-body',e=>e.innerHTML),/<a href="https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/1a1540e0de10f879"/,'a citation is a Gmail link');
     assert.deepEqual(await page.evaluate(()=>['[data-go]','a.opt[href^="https://mail.google.com/"]','[data-resolve]','[data-useless]','[data-dismiss]','[data-restore]'].map(q=>Boolean(document.querySelector('.inbox-sheet '+q)))),[true,true,true,true,true,false],'the choices: open, Gmail, Resolved, Not useful, Dismiss; no Restore on a new entry');
+    assert.equal(await page.$eval('.inbox-sheet [data-dismiss] .sub',e=>e.textContent),'Off your list and out of Pocket Inbox in Gmail; the watcher learns nothing','1.103: Dismiss says what it does in Gmail');
     await clickControl(page,'.inbox-sheet [data-resolve]');await page.waitForFunction(()=>!document.querySelector('.inbox-sheet'));
     await page.waitForFunction(()=>document.querySelectorAll('.inbox-view .inbox-item').length===1,'Oakridge leaves Open');
     await clickControl(page,'[data-inbox-filter="done"]');await page.waitForFunction(()=>document.querySelectorAll('.inbox-view .inbox-item.state-resolved').length===2,'Done: Oakridge joins Lakeview as resolved');
+    assert.equal(await page.$eval('[data-inbox-dismiss][aria-label="Dismiss: Oakridge dispatch conflict"]',b=>b.title),'Dismiss: off your list and out of Pocket Inbox in Gmail','1.103: with the Gmail label on, the X says the label comes off');
     await clickControl(page,'[data-inbox-dismiss][aria-label="Dismiss: Oakridge dispatch conflict"]');await page.waitForSelector('.inbox-item.state-dismissed');
+    await page.waitForFunction(()=>document.querySelector('#toast')?.textContent==='Dismissed. The Pocket Inbox label comes off in Gmail at the next check','the X confirms it like the sheet\'s Dismiss');
     assert.equal(await page.$$eval('.inbox-view .inbox-item',r=>r.length),2,'Done holds resolved and dismissed alike');
     await clickControl(page,'.inbox-item.state-dismissed [data-inbox-more]');await page.waitForSelector('.inbox-sheet [data-restore]');await page.waitForFunction(()=>[...document.querySelectorAll('.inbox-sheet')].every(e=>e.getAnimations({subtree:true}).every(a=>a.playState==='finished')));await clickControl(page,'.inbox-sheet [data-restore]');
     await page.waitForFunction(()=>!document.querySelector('.inbox-sheet'));await page.waitForFunction(()=>[...document.querySelectorAll('.inbox-view .inbox-item .title')].map(x=>x.textContent).join()==='Lakeview alarm timer tests','restored: only Lakeview is left in Done');

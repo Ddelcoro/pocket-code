@@ -3,6 +3,15 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.103.0] — 2026-11-11 · build 196
+
+Requested by Brad (2026-11-11): closing the tab he was on opened the neighbouring tab, which counted as seeing that conversation and took it out of Attention before he had looked at it. And the Inbox's Dismiss read *Hide it here; nothing else changes*, though with the Pocket Inbox label on it already takes the label off in Gmail.
+
+- **Closing the current tab opens New.** The tab X (`[data-close-session]` in `public/workspace.js`) now calls `openFreshNew` with the plus button's route (`#/new`, or `#/` in assistant mode) when the closed tab is the one you are on, instead of moving to the tab before it. Closing any other tab still only repaints the strip. Applies to conversation and view tabs (Projects, Inbox, Tasks and the rest).
+- **Dismiss says what it does in Gmail.** The inbox snapshot (`GET /api/inbox`, `pocket-inbox list`) gains `gmailLabel`: `{name}` when the watcher offers the label, can change it and it is on (the owner's setting, else the watcher's default), otherwise `null`. With it set, the row X's tip reads *Dismiss: off your list and out of Pocket Inbox in Gmail*, the sheet's Dismiss line *Off your list and out of Pocket Inbox in Gmail; the watcher learns nothing*, and both confirm *Dismissed. The Pocket Inbox label comes off in Gmail at the next check*. Without it they say *Off your list; the watcher learns nothing*. The watcher's behaviour is unchanged: the row X was already Dismiss, and the label sync already removed the label and archived the thread at the next check.
+- Manual: *Desktop and phone* (tabs), *Inbox Watch* (the decision table and the X).
+- Tests: `inbox.test.mjs` (`gmailLabel` on by default, off by the owner, unavailable when the watcher can only read, absent without the option); `ui-regressions.mjs` (closing the current project tab lands on `#/new`; the X tip, the sheet line and the X's confirmation with the label on).
+
 ## [1.102.0] — 2026-11-08 · build 195
 
 Requested by Brad (2026-11-08): 1.96 added the handoff card, but it only appeared when he asked for a handoff, so long conversations never prompted one. Pocket now offers it, and never hands off by itself.

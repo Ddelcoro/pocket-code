@@ -47,6 +47,9 @@ async function inboxAct(body,done){
  catch(e){toast(e.message||'Could not update the inbox');return null;}
 }
 const inboxNewCount=()=>inboxSnap?.newCount||0;
+// 1.103: with the Gmail label on, Dismiss (the row's X or the sheet's) also takes the label off in Gmail at the next check.
+const inboxLabelName=()=>inboxSnap?.gmailLabel?.name||'';
+const inboxDismissDone=()=>inboxLabelName()?`Dismissed. The ${inboxLabelName()} label comes off in Gmail at the next check`:'Dismissed';
 const inboxKindWord=e=>e.kind==='digest'?'digest':e.kind==='lookahead'?'look-ahead':'alert';
 const inboxStateWord=e=>({resolved:'Resolved',not_useful:'Not useful',dismissed:'Dismissed'})[e.state]||'';
 // The watcher writes citations as [label](msg:<gmail id>); they become Gmail links. Plain text otherwise.
@@ -165,7 +168,7 @@ function inboxRowHTML(e){
  return `<div class="session-item task-item inbox-item state-${esc(e.state)} kind-${esc(e.kind)}" data-item="${esc(e.id)}">
   <span class="inbox-marks">${inboxOpenState(e)?`<button class="task-check inbox-mark" data-inbox-read="${esc(e.id)}" aria-label="${e.state==='new'?'Mark as read':'Mark as unread'}: ${esc(e.title)}" title="${e.state==='new'?'Unread. Mark as read':'Read. Mark as unread'}">${INBOX_DOT}</button>`:`<span class="task-check inbox-mark" aria-hidden="true">${INBOX_DOT}</span>`}${sess?`<a class="task-check inbox-chat" href="#/chat/${esc(sess.id)}" aria-label="Open the conversation: ${esc(e.title)}" title="Open the conversation">${IC.chat}</a>`:''}</span>
   <button class="row" data-inbox-open="${esc(e.id)}"><span class="body"><span class="title">${esc(e.title)}</span>${first?`<span class="inbox-text">${esc(first)}</span>`:''}<span class="session-status">${facts}</span></span></button>
-  ${e.state==='dismissed'?'':`<button class="session-more icon inbox-x" data-inbox-dismiss="${esc(e.id)}" aria-label="Dismiss: ${esc(e.title)}" title="Dismiss">${IC.x}</button>`}
+  ${e.state==='dismissed'?'':`<button class="session-more icon inbox-x" data-inbox-dismiss="${esc(e.id)}" aria-label="Dismiss: ${esc(e.title)}" title="${inboxLabelName()?`Dismiss: off your list and out of ${esc(inboxLabelName())} in Gmail`:'Dismiss'}">${IC.x}</button>`}
   <button class="session-more icon" data-inbox-more="${esc(e.id)}" aria-label="Options for ${esc(e.title)}">${IC.more}</button></div>`;
 }
 /* 1.74: what Pocket's own watcher is doing (inbox-runner.mjs), when that is the reason the list is empty or stale. */
@@ -195,7 +198,7 @@ function bindInboxRows(root){
  root.querySelectorAll('[data-inbox-done]').forEach(a=>a.addEventListener('click',async()=>{inboxFilter='done';if(inboxView){try{if(!inboxDismissed)await loadInboxDismissed();}catch{}paintInboxView();}})); // 1.85.1: the finished ones are under Done
  root.querySelectorAll('[data-inbox-open]').forEach(b=>b.onclick=()=>inboxSheet(b.dataset.inboxOpen)); // 1.69.1: read first; the sheet starts the conversation
  root.querySelectorAll('[data-inbox-read]').forEach(b=>b.onclick=()=>{const e=inboxById(b.dataset.inboxRead);if(!e)return;if(e.state==='new')inboxMarkRead(e);else inboxMarkUnread(e);}); // 1.77
- root.querySelectorAll('[data-inbox-dismiss]').forEach(b=>b.onclick=()=>inboxAct({action:'dismiss',id:b.dataset.inboxDismiss},'Dismissed'));
+ root.querySelectorAll('[data-inbox-dismiss]').forEach(b=>b.onclick=()=>inboxAct({action:'dismiss',id:b.dataset.inboxDismiss},inboxDismissDone()));
  root.querySelectorAll('[data-inbox-more]').forEach(b=>b.onclick=()=>inboxSheet(b.dataset.inboxMore));
 }
 
@@ -242,12 +245,12 @@ function inboxSheet(id){
   ${e.gmail?`<a class="opt" href="${esc(e.gmail)}" target="_blank" rel="noopener">${IC.globe}<span>Open in Gmail</span></a>`:''}
   ${gone?`<button class="opt" data-restore>${IC.swap}<span>Restore<span class="sub">Back to the list; the watcher is told</span></span></button>`:`<button class="opt" data-resolve>${IC.tick}<span>Resolved<span class="sub">This situation is over; the watcher stops following it</span></span></button>
   <button class="opt" data-useless>${IC.bellOff}<span>Not useful<span class="sub">Don’t alert me about this kind of thing; the watcher adds it to your preferences</span></span></button>
-  <button class="opt" data-dismiss>${IC.x}<span>Dismiss<span class="sub">Hide it here; nothing else changes</span></span></button>`}`;
+  <button class="opt" data-dismiss>${IC.x}<span>Dismiss<span class="sub">${inboxLabelName()?`Off your list and out of ${esc(inboxLabelName())} in Gmail; the watcher learns nothing`:'Off your list; the watcher learns nothing'}</span></span></button>`}`;
  sh.querySelector('[data-go]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxOpen(id);});
  sh.querySelector('[data-chat]')?.addEventListener('click',()=>closeCurrentSheet?.());
  sh.querySelector('[data-resolve]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'resolve',id},'Marked resolved');});
  sh.querySelector('[data-useless]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'not_useful',id},'Noted: not useful');});
- sh.querySelector('[data-dismiss]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'dismiss',id},'Dismissed');});
+ sh.querySelector('[data-dismiss]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'dismiss',id},inboxDismissDone());});
  sh.querySelector('[data-restore]')?.addEventListener('click',()=>{closeCurrentSheet?.();inboxAct({action:'restore',id},'Restored');});
  const ITEM_DONE={alert:e.kind==='lookahead'?'Adding it to your Inbox at the next check':'Adding it to your Inbox at the next check. The watcher learns from it',resolve:'Marked resolved',not_useful:'Noted: not useful',dismiss:'Dismissed',restore:'Undone'};
  const bindItems=()=>{sh.querySelectorAll('[data-item-act]').forEach(b=>b.onclick=async()=>{ // 1.95: the sheet stays open; the card repaints with its new state

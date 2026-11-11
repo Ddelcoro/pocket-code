@@ -301,9 +301,11 @@ function paintOpenSessions(){
  if(el.dataset.key===key)return;el.dataset.key=key;
  el.innerHTML=list.map((s,i)=>{const pinned=Boolean(pinnedSession(s.id)),st=states[i],ca=caches[i];return `<span class="open-session ${current(s.id)?'current':''} ${pinned?'pinned':''}"><a href="${tabHref(s.id)}" ${current(s.id)?'aria-current="page"':''} title="${esc(s.title)}${pinned?' · Pinned':''}${st?' · '+esc(st.label):''}${ca?' · '+esc(ca.label):''}">${st?`<span class="tab-state ${st.kind==='running'?'ember':st.kind==='background'?'ember dim':'tab-'+st.kind}" role="img" aria-label="${esc(st.label)}"></span>`:''}${pinned?`<span class="pinmark">${IC.pin}</span><span class="vh">Pinned: </span>`:''}${ca?`<span class="tab-cache tab-cache-${ca.kind}" role="img" aria-label="${esc(ca.label)}">${ca.kind==='cold'?IC.snow:IC.hourglass}</span>`:''}${esc(s.title)}</a><button data-close-session="${esc(s.id)}" aria-label="Close tab for ${esc(s.title)}">${IC.x}</button></span>`;}).join('');
  el.querySelectorAll('[data-close-session]').forEach(b=>b.onclick=()=>{
-  const id=b.dataset.closeSession,shown=orderedOpenSessions(),index=shown.findIndex(s=>s.id===id),rest=shown.filter(s=>s.id!==id);
+  const id=b.dataset.closeSession;
   openSessions=openSessions.filter(s=>s.id!==id);writeLocal('pc-open-sessions',openSessions);
-  if(chatId===id||currentView()===id)location.hash=rest.length?tabHref(rest[Math.max(0,index-1)].id):'#/';else paintOpenSessions();
+  // 1.103: closing the tab you are on opens New, as the plus does, and never a neighbouring tab. Opening one counted as
+  // seeing it and took a conversation that was waiting for you out of Attention before you had looked (Brad).
+  if(chatId===id||currentView()===id){if(typeof openFreshNew==='function')openFreshNew(typeof assistantMode==='function'&&assistantMode()?'#/':'#/new');else location.hash='#/new';}else paintOpenSessions();
  });
  el.querySelector('[aria-current]')?.scrollIntoView({block:'nearest',inline:'nearest'});
 }
