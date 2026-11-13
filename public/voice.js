@@ -489,11 +489,11 @@ const Voice = (() => {
   function onAttention(id, kind) {
     if (!armed.has(id) || id !== chatId || isMuted()) return;
     setTimeout(() => {
-      const banner = document.getElementById(kind === 'approvals' ? 'approvals-open' : 'questions-open');
+      const banner = document.getElementById(kind === 'approvals' ? 'approvals-open' : kind === 'vault' ? 'vault-open' : 'questions-open');
       if (!banner || banner.hidden) return;
       const seen = announced.get(id) || new Set(); if (seen.has(kind)) return;
       seen.add(kind); announced.set(id, seen);
-      speakOut(kind === 'approvals' ? 'It needs your approval. Review it on screen.' : 'It has a question for you on screen.');
+      speakOut(kind === 'approvals' ? 'It needs your approval. Review it on screen.' : kind === 'vault' ? 'It needs a secret from the Vault. Allow it on screen.' : 'It has a question for you on screen.');
     }, 800);
   }
   // nextId: the conversation being opened. A session started from New session by voice keeps its conversation going.

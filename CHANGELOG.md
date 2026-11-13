@@ -3,6 +3,10 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.104.0] — 2026-11-13 · build 197
+
+Reported by Damon (2026-11-13): a Vault request only reached him as a device notification; the Pocket window itself showed nothing beyond the small Vault tab badge, so a missed notification meant the agent sat waiting (the run holds for up to 90 s, then the agent is told to say so). Vault requests now surface in the conversation that raised them (a banner like an approval banner, with Deny / Always allow / Allow once; its text opens the request in the Vault view), in the conversation list (Needs your OK on the Vault), as a toast anywhere in the app, and by voice. The server sends a {type:'vault'} event to the session stream when a request is raised and again when it is answered (view, notification, typed reply), so the banner clears wherever the answer came from; stateFor reports kind input with a vault count. Files: server.mjs (vaultNudge, stateFor), public/app.js (banner, stream event), public/vault.js (refreshVaultBanner, openVaultRequestFor, vaultToastNew), public/voice.js.
+
 ## [1.103.0] — 2026-11-11 · build 196
 
 Requested by Brad (2026-11-11): closing the tab he was on opened the neighbouring tab, which counted as seeing that conversation and took it out of Attention before he had looked at it. And the Inbox's Dismiss read *Hide it here; nothing else changes*, though with the Pocket Inbox label on it already takes the label off in Gmail.

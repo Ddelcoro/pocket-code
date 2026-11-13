@@ -1791,6 +1791,8 @@ function paintSessionPanels() {
   const current = allSessions.find(s => s.id === chatId);
   const qb=$('#questions-open');if(qb){qb.hidden=!current?.state?.questions;if(!qb.hidden&&!qb.querySelector('.wb-cta'))paintWaitBanner(qb,{title:(ENGINE_LABELS[providerOf(chatId)])+' is waiting for your answer',note:current.state.label==='Needs your answer'?'The reply is paused until you answer.':'',cta:'Answer'});} // refreshQuestions fills in the count
   const ab=$('#approvals-open');if(ab){ab.hidden=!current?.state?.approvals;if(current?.state?.approvals&&!ab.querySelector('.wb-cta'))paintWaitBanner(ab,{title:current.state.label||'Action needs approval',note:current.state.label==='Needs approval'?'The reply is paused until you allow or deny it.':'',cta:'Review',mark:IC.info});} // refreshApprovals paints the request itself
+  const vb=$('#vault-open');if(vb&&typeof refreshVaultBanner==='function'){if(!current?.state?.vault)vb.hidden=true;else if(vb.hidden||!vb.querySelector('[data-act]'))refreshVaultBanner(chatId);} // 1.104: the Vault request this conversation is waiting on
+  if(typeof loadVault==='function'&&typeof repaintVault==='function'&&allSessions.some(s=>s.state?.vault))loadVault().then(repaintVault).catch(()=>{}); // 1.104: any conversation waiting on the Vault refreshes the badge and toasts
   if(typeof paintAgents==='function')paintAgents(); // 1.82: the row under the controls also reports background jobs
   if (current && $('#chat-statebar') && !sessionsStale) markRead(chatId, current.state); // 1.35: the header's run status names the state; no second copy
   const queueButton=$('#queue-open');if(queueButton)queueButton.textContent='Queue'+(current?.state?.queued?' ('+current.state.queued+')':'');
@@ -2837,6 +2839,7 @@ async function renderChat(id, { away = false } = {}) {
     <button id="agents-open" class="agents-open" aria-haspopup="dialog" hidden></button>
     <div class="question-banner" id="questions-open" hidden>${String(id).startsWith('cx:') ? 'Codex' : String(id).startsWith('acp:') ? 'OpenRouter' : 'Claude'} has a question</div>
     <div class="question-banner" id="approvals-open" hidden>Waiting for your OK · Review</div>
+    <div class="question-banner" id="vault-open" hidden>The Vault needs your OK · Review</div>
     <p id="connection-state" class="connection-state" role="status" hidden></p>
     <div class="findbar" id="findbar" hidden>
       <input type="search" id="fq" placeholder="Find in conversation" autocomplete="off" enterkeyhint="search">
@@ -2858,6 +2861,7 @@ async function renderChat(id, { away = false } = {}) {
   $('#git-open').onclick = () => openGit(chatId);
   $('#questions-open').onclick=e=>{if(!e.target.closest?.('[data-act]'))openQuestions(chatId);};
   $('#approvals-open').onclick=e=>{if(!e.target.closest?.('[data-act]'))openApprovals(chatId);};
+  $('#vault-open').onclick=e=>{if(!e.target.closest?.('[data-act]')&&typeof openVaultRequestFor==='function')openVaultRequestFor(chatId);};
   $('#chgb').onclick = () => openChanges();
   $('#findb').onclick = () => findOpen(!findIsOpen());
   const sideb = $('#sideb'); if (sideb) sideb.onclick = () => SideChat.toggle(chatId); // 1.78
@@ -3676,6 +3680,7 @@ function openES() {
     if (d.itemId) chatLastItem = d.itemId;
     if(d.type==='questions'){refreshQuestions(streamId);refreshSessions();Voice.onAttention(streamId,'questions');return;}
     if(d.type==='approvals'){refreshApprovals(streamId);refreshSessions();Voice.onAttention(streamId,'approvals');return;}
+    if(d.type==='vault'){if(typeof refreshVaultBanner==='function')refreshVaultBanner(streamId);refreshSessions();Voice.onAttention(streamId,'vault');return;} // 1.104: a Vault request raised (or answered) in this conversation
     if(d.type==='usage'){paintContextMeter(streamId);return;}
     if (d.type === 'watch') { watching = true; if (composerWorking) setComposer(false); }
     else if (d.type === 'user') { // mirror: a message sent from another surface

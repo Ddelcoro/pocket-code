@@ -853,8 +853,53 @@ function paintVaultBadges(){
  document.querySelectorAll('[data-vault-badge]').forEach(el=>{el.textContent=n?String(n):'';el.hidden=!n;});
  document.querySelectorAll('[data-rail-view="vault"]').forEach(b=>{const g=b.querySelector('[data-vault-lock]');if(locked&&!g)b.querySelector('[data-vault-badge]')?.insertAdjacentHTML('beforebegin',VAULT_LOCK_MARK);else if(!locked)g?.remove();});
  document.querySelectorAll('[data-vault-home]').forEach(el=>{el.innerHTML='Vault'+(locked?VAULT_LOCK_MARK:'')+(n?' · '+n+' waiting':'');el.classList.toggle('due',n>0);});
+ if(typeof vaultToastNew==='function')vaultToastNew(); // 1.104
 }
 const vaultTabState=()=>{const n=vaultRequestCount();return n?{kind:'input',label:n===1?'A request is waiting':n+' requests are waiting'}:null;};
+/* ---------- 1.104 (Damon): the request shows in the conversation that raised it ----------
+A device push can go by unseen; the Vault tab badge is small. So the conversation gets the same kind of banner an
+approval gets, with Deny / Always allow / Allow once, and a toast the moment a new request appears anywhere in the app. */
+const vaultRequestsFor=id=>vaultRequests().filter(r=>r.session===id);
+async function refreshVaultBanner(id){
+ const b=document.getElementById('vault-open');if(!b||chatId!==id)return;
+ try{await loadVault(true);}catch{return;}
+ if(chatId!==id)return;
+ repaintVault();
+ const reqs=vaultRequestsFor(id);
+ b.hidden=!reqs.length;
+ const label=document.getElementById('work-label');
+ if(!reqs.length){if(label&&label.textContent==='Waiting for your OK on the Vault')label.textContent='Working';return;}
+ if(reqs.length===1){
+  const r=reqs[0],fill=Array.isArray(r.argv)&&r.argv[0]==='pocket-fill',names=vaultRequestNames(r);
+  const note=fill?`Fill ${names} into a web page (${r.argv[2]||''})`:(Array.isArray(r.argv)?r.argv.join(' '):'');
+  const answer=async(decision,button)=>{
+   if(typeof waitBannerBusy==='function')waitBannerBusy(b,'Sending your answer…');
+   vaultMissed.delete(r.id);
+   const out=await vaultAct({action:'answer',request:r.id,decision},decision==='deny'?'Denied':decision==='always'?'Allowed. This command is remembered for '+names:'Allowed once');
+   if(!out)b.querySelectorAll('button').forEach(x=>x.disabled=false);
+   refreshVaultBanner(id);if(typeof refreshSessions==='function')refreshSessions();
+  };
+  const actions=[{label:'Deny',run:()=>answer('deny')}];
+  if(r.allowAlways!==false)actions.push({label:'Always allow',run:()=>answer('always')});
+  actions.push({label:'Allow once',primary:true,run:()=>answer('once')});
+  paintWaitBanner(b,{title:`The agent wants to ${fill?'fill':'use'} ${names}${fill?'':' for this command'}`,note,mono:!fill,cta:'Details',mark:IC.info,actions});
+ } else paintWaitBanner(b,{title:reqs.length+' Vault requests need your OK',note:'The reply is paused until you answer them in the Vault.',cta:'Review',mark:IC.info});
+ if(label)label.textContent='Waiting for your OK on the Vault';
+}
+function openVaultRequestFor(id){
+ const reqs=vaultRequestsFor(id);
+ location.hash=reqs.length===1?'#/vault/request/'+encodeURIComponent(reqs[0].id):'#/vault/requests';
+}
+// A toast the first time each request is seen on this page, wherever the owner is in the app.
+const vaultToasted=new Set();
+function vaultToastNew(){
+ for(const r of vaultRequests()){
+  if(vaultToasted.has(r.id))continue;vaultToasted.add(r.id);
+  if(typeof toast!=='function')continue;
+  const title=r.session?(r.sessionTitle||(typeof sessionName==='function'?sessionName(r.session):'')||''):'';
+  toast(`Vault: ${title?'“'+title+'”':'an agent'} is waiting for your OK to use ${vaultRequestNames(r)}`);
+ }
+}
 setInterval(()=>{if(!vaultOn()||document.visibilityState!=='visible'||!(vaultView||railView()==='vault'||document.querySelector('[data-vault-home],[data-vault-badge]')||openSessions?.some?.(s=>s.id==='vault')))return;loadVault(true).then(()=>{repaintVault();}).catch(()=>{});},30000);
 
 /* ---------- 1.42: catching secrets in the composer ----------
