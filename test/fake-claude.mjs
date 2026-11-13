@@ -86,7 +86,7 @@ lines.on('line',line=>{
   if(!working){const line={type:'user',message:{role:'user',content:text}};if(text.includes('__LATEUSER__'))setTimeout(()=>append(line),900);else append(line);}
   if(text.includes('__APPROVAL__')){questionKeepAlive=setInterval(()=>{},1000);console.log(JSON.stringify({type:'control_request',request_id:'native-approval',request:{subtype:'can_use_tool',tool_name:'Bash',input:{command:'echo fixture-only-secret > approval.txt'}}}));return;}
   // 1.56: __TOOLREQ__ {"tool":…,"input":{…}}: ask permission for that tool call, then end the turn on the answer
-  if(text.includes('__TOOLREQ__ ')){questionKeepAlive=setInterval(()=>{},1000);const req=JSON.parse(text.slice(text.indexOf('__TOOLREQ__ ')+12));console.log(JSON.stringify({type:'control_request',request_id:'native-tool-'+(req.n||0),request:{subtype:'can_use_tool',tool_name:req.tool,input:req.input}}));return;}
+  if(text.includes('__TOOLREQ__ ')){questionKeepAlive=setInterval(()=>{},1000);const req=JSON.parse(text.slice(text.indexOf('__TOOLREQ__ ')+12));console.log(JSON.stringify({type:'control_request',request_id:'native-tool-'+(req.n||0),request:{subtype:'can_use_tool',tool_name:req.tool,input:req.input,...(req.request||{})}}));return;}
   if(text.includes('__QUESTION__')){questionKeepAlive=setInterval(()=>{},1000);console.log(JSON.stringify({type:'control_request',request_id:'native-test',request:{subtype:'can_use_tool',tool_name:'AskUserQuestion',input:{questions:[{header:'Color',question:'Which color?',options:[{label:'Blue',description:'Cool'},{label:'Red',description:'Warm'}],multiSelect:false}]}}}));return;}
   if (working) return;
   working=true;

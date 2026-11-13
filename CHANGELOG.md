@@ -3,6 +3,10 @@
 Every version that reached a server is listed here, newest first, with its frontend asset
 build. Each has a matching [GitHub release](https://github.com/bbesner/pocket-code/releases).
 
+## [1.105.0] — 2026-11-13 · build 198
+
+Requested by Damon (2026-11-12): Full access replies still showed "Run: …?" cards. Claude Code 2.1.31x asks for an OK on any Bash command its parser cannot read (a Python heredoc, say), calling it "Dangerous rm operation not ruled out" (decision_reason_type safetyCheck). That check ignores bypassPermissions, permissions.allow and skipDangerousModePermissionPrompt; CLAUDE_CODE_EVEN_MORE_DANGEROUSLY_SKIP_PERMISSIONS worked in 1 of 10 headless runs and Pocket strips CLAUDE_CODE_* from the spawn env anyway. Full access is the owner's standing Allow, so Pocket now answers every non-question can_use_tool request in a Full access reply with Allow through approvals.autoAllow (source full-access), audited in approval-decisions.jsonl as rule full-access:<decision_reason_type>, with a server log line "full access allowed session=… tool=… reason=…". Review actions is unchanged: the same asks still show a card there. Numbered after #236 (1.104.0 / build 197); renumber if that lands differently. Files: server.mjs (handleTurnLine), approvals.mjs (source), docs/action-approvals.md, docs/manual/approvals.md, test/fake-claude.mjs (__TOOLREQ__ carries decision_reason_type), test/trusted-actions.test.mjs.
+
 ## [1.103.0] — 2026-11-11 · build 196
 
 Requested by Brad (2026-11-11): closing the tab he was on opened the neighbouring tab, which counted as seeing that conversation and took it out of Attention before he had looked at it. And the Inbox's Dismiss read *Hide it here; nothing else changes*, though with the Pocket Inbox label on it already takes the label off in Gmail.

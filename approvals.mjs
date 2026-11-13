@@ -41,14 +41,15 @@ export class ApprovalInbox {
  // card. Same guarantees as a tapped Allow: bound to this live turn, recorded before the pipe is written.
  // Returns false (show the card instead) whenever it cannot do that: closed or old turn, an oversized
  // request, a card already open for it, or an audit that cannot be written.
- autoAllow({nativeId,turnId,kind,title,details,allow,deny,rule,tool}){
+ // 1.105: `source` says who answered: 'auto-trusted' (a trusted rule) or 'full-access' (the reply's own mode).
+ autoAllow({nativeId,turnId,kind,title,details,allow,deny,rule,tool,source='auto-trusted'}){
   if(this.closed||nativeId==null||!turnId||turnId!==this.turnId()||!rule)return false;
   if(this.autoAnswered.has(nativeId))return true;
   if([...this.pending.values()].some(r=>r.nativeId===nativeId))return false;
   const text=JSON.stringify(details,null,2);
   if(!text||text.length>200000)return false;
   const fingerprint=createHash('sha256').update(JSON.stringify({kind,title,details,allow,deny})).digest('hex');
-  try{this.audit({event:'auto-allowed',sessionId:this.sessionId(),turnId,requestId:randomUUID(),kind,tool,fingerprint,decision:'allow',source:'auto-trusted',rule});}catch{return false;}
+  try{this.audit({event:'auto-allowed',sessionId:this.sessionId(),turnId,requestId:randomUUID(),kind,tool,fingerprint,decision:'allow',source,rule});}catch{return false;}
   this.autoAnswered.add(nativeId);
   if(this.autoAnswered.size>500)this.autoAnswered.delete(this.autoAnswered.values().next().value);
   // A failed write means the turn's input pipe is gone; nothing else can be sent on it either.

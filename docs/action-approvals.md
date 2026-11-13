@@ -118,6 +118,11 @@ If the record cannot be written, nothing is approved automatically: Pocket falls
 and denies the request if the card cannot be recorded either. A request that arrives while
 its own card is already open stays on the card.
 
+In Full access, a request the CLI still raises (its bypass-immune safety checks, or a plugin hook
+that insists on asking) is answered the same way: `"source":"full-access"`, and the rule is the
+CLI's reason type (`full-access:safetyCheck`). Full access is the owner's standing Allow, so no
+card is shown; the trusted list plays no part in that mode.
+
 ## Recovery and audit
 
 Each request belongs to one session, native request and live turn. Replies are

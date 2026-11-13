@@ -27,6 +27,7 @@ test('auto-allow is bound to the live turn, audited first, and fails closed',asy
  broken=true;assert.equal(box.autoAllow({...req,nativeId:'n4'}),false,'no audit, no approval');await sleep(0);assert.equal(writes.length,1);
  broken=false;box.receive({...req,nativeId:'n5'});assert.equal(box.autoAllow({...req,nativeId:'n5'}),false,'a request already on a card stays on the card');
  assert.equal(box.autoAllow({...req,nativeId:'n6',details:{text:'x'.repeat(200001)}}),false);
+ assert.equal(box.autoAllow({...req,nativeId:'n3b',rule:'full-access:safetyCheck',source:'full-access'}),true);await sleep(0);assert.deepEqual([audit.at(-1).source,audit.at(-1).rule],['full-access','full-access:safetyCheck']);
  box.clear();assert.equal(box.autoAllow({...req,nativeId:'n7'}),false);
  let failed=null;const lost=new ApprovalInbox({sessionId:()=>'s',turnId:()=>'t',write:async()=>{throw Error('pipe lost');},onAutoError:(e,info)=>failed=[e.message,info.rule]});
  assert.equal(lost.autoAllow({...req,turnId:'t'}),true);await sleep(0);assert.deepEqual(failed,['pipe lost','Bash(techpro-lookup:*)']);
@@ -47,8 +48,8 @@ async function server(t,port,env){
  const lines=f=>fs.existsSync(path.join(dir,f))?fs.readFileSync(path.join(dir,f),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
  const auditFile=path.join(dir,'data','approval-decisions.jsonl');
  // Start a turn whose CLI asks permission for one tool call; resolve with what happened to it.
- const ask=async(tool,input,approvalMode='review')=>{
-  const r=await call('/new',{cwd:repo,text:'__TOOLREQ__ '+JSON.stringify({tool,input}),approvalMode,clientMessageId:randomUUID()});
+ const ask=async(tool,input,approvalMode='review',request)=>{
+  const r=await call('/new',{cwd:repo,text:'__TOOLREQ__ '+JSON.stringify({tool,input,request}),approvalMode,clientMessageId:randomUUID()});
   assert.equal(r.status,202,JSON.stringify(r.body));const id=r.body.id;
   for(let i=0;i<100;i++){
    const answered=lines('calls.responses').find(x=>x.id===id);if(answered)return {id,auto:answered.behavior,card:null};
@@ -83,9 +84,17 @@ test('HTTP: trusted actions run without a card in Review actions, are audited, a
   const r=await s.ask(tool,input);assert.equal(r.auto,null,JSON.stringify(input));assert.equal(r.card.title,'Allow '+tool+'?');
   assert.equal((await s.call(`/session/${r.id}/approvals/${r.card.id}/decision`,{decision:'deny'})).status,200);
  }
- // Full access is untouched: the trusted list never answers for it.
- const full=await s.ask('Bash',{command:'techpro-lookup help'},'full');assert.equal(full.auto,null);
- assert.equal(s.lines('data/approval-decisions.jsonl').some(x=>x.sessionId===full.id&&x.event==='auto-allowed'),false);
+ // 1.105: Full access answers the CLI's own asks (its bypass-immune safety checks) without a card, audited as full-access.
+ const full=await s.ask('Bash',{command:"python3 - <<'EOF'\nprint('fixture-arg')\nEOF",description:'Run a script'},'full',{decision_reason:'Dangerous rm operation not ruled out — the shell may read this command differently than it was parsed',decision_reason_type:'safetyCheck',classifier_approvable:false,suppress_always_allow_rule:true});
+ assert.equal(full.auto,'allow');assert.equal(full.card,null);
+ const fe=s.lines('data/approval-decisions.jsonl').find(x=>x.sessionId===full.id);
+ assert.deepEqual([fe.event,fe.decision,fe.source,fe.rule,fe.tool,fe.kind],['auto-allowed','allow','full-access','full-access:safetyCheck','Bash','tool']);
+ assert.equal(fs.readFileSync(s.auditFile,'utf8').includes('fixture-arg'),false,'the command never reaches the audit');
+ assert.match(s.logs(),/full access allowed session=\S+ tool=Bash reason=safetyCheck: Dangerous rm operation not ruled out/);
+ // The trusted list still never answers for Full access; the mode itself does, with its own source.
+ const full2=await s.ask('Bash',{command:'techpro-lookup help'},'full');assert.equal(full2.auto,'allow');
+ assert.equal(s.lines('data/approval-decisions.jsonl').some(x=>x.sessionId===full2.id&&x.source==='auto-trusted'),false);
+ assert.equal(s.lines('data/approval-decisions.jsonl').find(x=>x.sessionId===full2.id).rule,'full-access:ask');
 
  // Settings: validated, saved outside git, outranks the environment; an empty saved list trusts nothing.
  const bad=await s.call('/settings',{trustedActions:['WebSearch','Write(/etc/x)']});

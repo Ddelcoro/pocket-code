@@ -55,7 +55,9 @@ Each reply runs in one of two permission modes:
   sandbox and asks for anything outside it; safe reads and actions its own configuration already allows run without
   asking.
 - **Full access**: the agent runs its tools without routine prompts, with the full access of the server account Pocket runs
-  as.
+  as. Claude Code still raises a few asks of its own in this mode (since 2.1.31x it wants an OK for any command its
+  parser cannot read, calling it a possible dangerous `rm`); Pocket answers those Allow and records each in the approval
+  audit as `full-access`, so a Full access reply shows no card.
 
 Pick the mode for the next reply with the permissions chip above the message box (**Review actions** or **Full access**;
 **Review** or **Full** on a narrow screen), or **Conversation options → Permissions for the next reply**. The sheet is
